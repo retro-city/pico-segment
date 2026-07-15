@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# mpremote wrapper using the vendored copy in tools/vendor
+# (no pip/venv on this machine; depends only on system pyserial).
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHONPATH="$DIR/vendor${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m mpremote "$@"
