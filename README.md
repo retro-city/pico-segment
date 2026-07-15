@@ -10,9 +10,12 @@ through an HT16K33A over I2C.
   is on, `mhz_normal` (default 66) while it is off. Speeds and turbo
   state persist in `settings.json` on the Pico; `config.py` only
   provides first-boot defaults (delete `settings.json` to reset).
-- **Setup mode**: hold A+B for 2 s. The speed for the current turbo
-  state blinks; A = +1 MHz, B = −1 MHz (hold to auto-repeat), A+B
-  together saves and exits. The reset output is suspended during setup.
+- **Setup mode**: hold A+B for 2 s (display shows `SEt`, release, value
+  blinks). A = +1, B = −1, hold to auto-repeat; keep holding 2 s and
+  steps become ±10. A+B together saves and exits. The reset output is
+  suspended during setup. Above 999 MHz the display switches to GHz
+  with a decimal point (`1.00` … `9.99`, 10 MHz per step); stepping
+  down from `1.00` returns to `999`.
 - At power-on all three LEDs light for 2 seconds (lamp test), then only the
   **power** LED stays lit. Turbo starts on (`TURBO_ON_AT_BOOT`).
 - **Turbo** toggles with button B (SW2). The turbo LED follows it, and

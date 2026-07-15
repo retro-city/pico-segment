@@ -38,6 +38,28 @@ COMBO_GRACE_MS = 200   # window for the second button of the A+B combo
 STEP_GRACE_MS = 150    # setup: tell a +-1 step apart from an A+B save
 STEP_HOLD_MS = 450     # setup: hold this long before auto-repeat
 STEP_REPEAT_MS = 80    # setup: auto-repeat interval
+BIG_STEP_HOLD_MS = 2000  # setup: hold this long and steps become +-10
+
+# The adjustable speed runs on a display grid: 1 MHz steps up to 999,
+# then 10 MHz steps shown as GHz with two decimals (1.00 ... 9.99).
+MHZ_MAX = 9990
+_IDX_MAX = 999 + (MHZ_MAX - 1000) // 10 + 1
+
+
+def _mhz_to_idx(mhz):
+    return mhz if mhz <= 999 else 999 + (mhz - 1000) // 10 + 1
+
+
+def _idx_to_mhz(idx):
+    return idx if idx <= 999 else 1000 + (idx - 1000) * 10
+
+
+def show_mhz(disp, mhz):
+    """MHz as-is up to 999; above that as GHz, DP on the first digit."""
+    if mhz <= 999:
+        disp.number(mhz)
+    else:
+        disp.show('%d.%02d' % (mhz // 1000, (mhz % 1000) // 10))
 
 
 class Settings:
@@ -53,11 +75,15 @@ class Settings:
             with open(self.PATH) as f:
                 d = json.load(f)
             self.turbo = bool(d.get('turbo', self.turbo))
-            self.mhz_turbo = int(d.get('mhz_turbo', self.mhz_turbo))
+            self.mhz_turbo = self._clamp(d.get('mhz_turbo', self.mhz_turbo))
             n = d.get('mhz_normal', self.mhz_normal)
-            self.mhz_normal = None if n is None else int(n)
+            self.mhz_normal = None if n is None else self._clamp(n)
         except (OSError, ValueError):
             pass  # missing or corrupt file -> config.py defaults
+
+    @staticmethod
+    def _clamp(mhz):
+        return min(MHZ_MAX, max(1, int(mhz)))
 
     def save(self):
         try:
@@ -177,13 +203,21 @@ def easter_egg(disp):
 # --- setup mode ---------------------------------------------------------
 
 class Stepper:
-    """One setup button: step once after a grace period, then repeat."""
+    """One setup button: step once after a grace period, then repeat.
+
+    Steps are display units (+-1); after BIG_STEP_HOLD_MS of holding
+    the same button they grow to +-10.
+    """
 
     def __init__(self, btn, delta):
         self.btn = btn
         self.delta = delta
         self.pend = None      # press awaiting the grace period
         self.next_rep = None  # next auto-repeat due
+
+    def _step(self):
+        big = self.btn.held_ms() >= BIG_STEP_HOLD_MS
+        return self.delta * (10 if big else 1)
 
     def poll(self, now, edge):
         d = 0
@@ -192,12 +226,12 @@ class Stepper:
         if self.btn.down:
             if self.pend is not None and \
                     time.ticks_diff(now, self.pend) >= STEP_GRACE_MS:
-                d = self.delta
+                d = self._step()
                 self.pend = None
                 self.next_rep = time.ticks_add(now, STEP_HOLD_MS)
             elif self.next_rep is not None and \
                     time.ticks_diff(now, self.next_rep) >= 0:
-                d = self.delta
+                d = self._step()
                 self.next_rep = time.ticks_add(now, STEP_REPEAT_MS)
         else:
             if edge and self.pend is not None:
@@ -220,7 +254,7 @@ def setup_mode(disp, settings, btn_a, btn_b):
         time.sleep_ms(10)
     time.sleep_ms(300)
     disp.blink(1)  # 2 Hz hardware blink marks setup mode
-    disp.number(val)
+    show_mhz(disp, val)
 
     step_a = Stepper(btn_a, +1)
     step_b = Stepper(btn_b, -1)
@@ -230,11 +264,13 @@ def setup_mode(disp, settings, btn_a, btn_b):
         edge_b = btn_b.update()
         if btn_a.down and btn_b.down:
             break  # save and leave
-        new = val + step_a.poll(now, edge_a) + step_b.poll(now, edge_b)
-        new = min(999, max(1, new))
-        if new != val:
-            val = new
-            disp.number(val)
+        d = step_a.poll(now, edge_a) + step_b.poll(now, edge_b)
+        if d:
+            idx = min(_IDX_MAX, max(1, _mhz_to_idx(val) + d))
+            new = _idx_to_mhz(idx)
+            if new != val:
+                val = new
+                show_mhz(disp, val)
         time.sleep_ms(10)
 
     if editing_turbo:
@@ -268,9 +304,9 @@ def run():
 
     def show_speed():
         if settings.turbo or settings.mhz_normal is None:
-            disp.number(settings.mhz_turbo)
+            show_mhz(disp, settings.mhz_turbo)
         else:
-            disp.number(settings.mhz_normal)
+            show_mhz(disp, settings.mhz_normal)
 
     def toggle_turbo():
         settings.turbo = not settings.turbo
