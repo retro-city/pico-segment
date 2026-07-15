@@ -37,8 +37,9 @@ RESET_OUT = Pin(config.RESET_OUT_PIN, Pin.OUT)
 COMBO_GRACE_MS = 200   # window for the second button of the A+B combo
 STEP_GRACE_MS = 150    # setup: tell a +-1 step apart from an A+B save
 STEP_HOLD_MS = 450     # setup: hold this long before auto-repeat
-STEP_REPEAT_MS = 80    # setup: auto-repeat interval
+STEP_REPEAT_MS = 80    # setup: auto-repeat interval for +-1 steps
 BIG_STEP_HOLD_MS = 2000  # setup: hold this long and steps become +-10
+BIG_STEP_REPEAT_MS = 240  # setup: slower auto-repeat while stepping +-10
 
 # The adjustable speed runs on a display grid: 1 MHz steps up to 999,
 # then 10 MHz steps shown as GHz with two decimals (1.00 ... 9.99).
@@ -214,9 +215,11 @@ class Stepper:
         self.delta = delta
         self.pend = None      # press awaiting the grace period
         self.next_rep = None  # next auto-repeat due
+        self.rep_ms = STEP_REPEAT_MS
 
     def _step(self):
         big = self.btn.held_ms() >= BIG_STEP_HOLD_MS
+        self.rep_ms = BIG_STEP_REPEAT_MS if big else STEP_REPEAT_MS
         return self.delta * (10 if big else 1)
 
     def poll(self, now, edge):
@@ -232,7 +235,7 @@ class Stepper:
             elif self.next_rep is not None and \
                     time.ticks_diff(now, self.next_rep) >= 0:
                 d = self._step()
-                self.next_rep = time.ticks_add(now, STEP_REPEAT_MS)
+                self.next_rep = time.ticks_add(now, self.rep_ms)
         else:
             if edge and self.pend is not None:
                 d = self.delta  # tap released within the grace period
