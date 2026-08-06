@@ -16,9 +16,10 @@ Behavior:
     current turbo state blinks; A = +1 MHz, B = -1 MHz (hold to
     repeat), A+B together saves and exits. The reset output to the
     motherboard is suspended while setup is open.
-  - The HDD LED mirrors activity on every input in config.HDD_INPUTS,
-    with short pulses latched by IRQ and stretched so they stay
-    visible, and the level shifter's latch kicked back to idle.
+  - The HDD LED mirrors activity on every input in config.HDD_INPUTS:
+    direct GPIO lines by edge IRQ, TXB-backed lines by polling only —
+    the TXB latches the active level until it is kicked back to idle,
+    so even microsecond pulses wait around for the poll.
 """
 
 import json
@@ -167,21 +168,28 @@ def _hdd_irq(pin):
 class HddLine:
     """One activity input; any line reading active lights the LED."""
 
-    def __init__(self, pin_no, active_low, idle_bias=False):
+    def __init__(self, pin_no, active_low, direct=False):
         self.active_low = active_low
+        self.direct = direct
         self.trig = Pin.IRQ_FALLING if active_low else Pin.IRQ_RISING
-        # idle_bias: pull toward the idle level so a disconnected line
-        # reads "no activity" instead of floating at threshold. Only
-        # for direct GPIO lines — a pull fighting a TXB channel's
-        # keeper re-triggers its one-shots and the line oscillates.
-        if idle_bias:
+        # Only direct GPIO lines get an idle-bias pull (so a
+        # disconnected line reads "no activity" instead of floating)
+        # and edge IRQs. TXB-backed lines get neither: a pull fights
+        # the channel's keeper, and a slow edge (an opto turning on)
+        # makes its one-shots oscillate — with an IRQ armed, that
+        # oscillation fires at C level faster than the handler can
+        # disarm it and hangs the board. Polling misses nothing there,
+        # because the TXB latches the active level until kicked.
+        if direct:
             self.pull = Pin.PULL_UP if active_low else Pin.PULL_DOWN
         else:
             self.pull = None
         self.pin = Pin(pin_no, Pin.IN, self.pull)
+        self.pin.irq(handler=None)  # shed any handler from a soft restart
 
     def arm(self):
-        self.pin.irq(handler=_hdd_irq, trigger=self.trig)
+        if self.direct:
+            self.pin.irq(handler=_hdd_irq, trigger=self.trig)
 
     def active(self):
         return self.pin.value() == (0 if self.active_low else 1)
@@ -422,11 +430,13 @@ def run():
                 toggle_turbo()
 
         # --- HDD LED -------------------------------------------------
-        # An IRQ only ever LIGHTS the LED; while lit, polling keeps it
-        # alive and the edge IRQs stay disarmed — a continuously
-        # toggling line cannot fire more than one IRQ per LED cycle,
-        # so it can never starve this loop.
-        if hdd_pulse:
+        # Direct lines report by IRQ (which disarms itself until the
+        # LED is dark again); TXB lines are picked up by the dark-state
+        # poll, their latch holding the pulse until it is seen. While
+        # lit the raw level is NOT trusted — a latched line reads
+        # active forever — so the kick at timeout decides between a
+        # genuine hold and a stale latch.
+        if hdd_pulse or (not hdd_lit and hdd_active()):
             hdd_pulse = False
             hdd_off_at = time.ticks_add(now, config.HDD_MIN_ON_MS)
             if not hdd_lit:

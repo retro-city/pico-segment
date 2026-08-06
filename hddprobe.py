@@ -26,13 +26,13 @@ MAX_PULSES = 2000     # cap stored widths so memory stays flat
 
 
 class Chan:
-    def __init__(self, pin_no, active_low, idle_bias=False):
+    def __init__(self, pin_no, active_low, direct=False):
         self.n = pin_no
         self.act = 0 if active_low else 1
         self.idle = 1 - self.act
         # pull only on direct GPIO lines; a pull on a TXB channel
         # fights its keeper and the line oscillates
-        if idle_bias:
+        if direct:
             self.pull = Pin.PULL_UP if active_low else Pin.PULL_DOWN
         else:
             self.pull = None

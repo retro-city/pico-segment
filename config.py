@@ -49,16 +49,18 @@ POWER_LED = RED
 TURBO_LED = YELLOW
 HDD_LED = GREEN
 
-# HDD activity inputs: (pin, active_low, idle_bias) — ANY line
-# reading active lights the LED. idle_bias pulls the pin toward its
-# idle level so a disconnected line stays quiet; use it ONLY on direct
-# GPIO lines — a pull fighting a TXB channel's keeper makes the line
-# oscillate.
+# HDD activity inputs: (pin, active_low, direct) — ANY line reading
+# active lights the LED. direct=True marks a plain GPIO line: it gets
+# an idle-bias pull (disconnected = quiet) and edge IRQs. TXB-backed
+# lines must stay direct=False — a pull fights the TXB's keeper, and
+# a slow edge (like an opto's) makes its one-shots oscillate, which
+# with an IRQ armed storms and hangs the board. They are polled
+# instead, missing nothing: the TXB latches the active level until
+# the firmware kicks it back to idle.
 #  - GP28: direct sense loom (mobo LED- pin, 10k pull-up to 3V3, 10k
 #    series); the open-collector source sinks it low on activity.
 #  - GP18: TXB0104 channel on J3 pin 7; a PC817 opto (collector on
-#    the line, emitter to GND) sinks it low on activity. The kick
-#    logic drives the TXB latch back to idle-high after each release.
+#    the line, emitter to GND) sinks it low on activity.
 HDD_INPUTS = (
     (28, True, True),
     (18, True, False),

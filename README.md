@@ -33,8 +33,11 @@ through an HT16K33A over I2C.
 - The **HDD** LED mirrors disk activity on every input in
   `HDD_INPUTS` — by default GP28 (direct sense loom on the mobo HDD
   LED header, active low) and GP18 (TXB channel on J3 pin 7, pulled
-  low by an opto on activity); any active line lights it. Pulses are caught by interrupt and
-  stretched to `HDD_MIN_ON_MS` so short bursts stay visible.
+  low by an opto on activity); any active line lights it. Direct lines
+  are caught by interrupt; TXB lines are polled only (the opto's slow
+  edges make the TXB oscillate, which would storm an IRQ — its latch
+  holds each pulse until polled instead). Pulses are stretched to
+  `HDD_MIN_ON_MS` so short bursts stay visible.
 - Easter egg: hold reset for 5 s (`EGG_HOLD_MS`).
 
 LED roles default to power = LED2 (red), turbo = LED3 (yellow),
