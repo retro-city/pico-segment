@@ -22,10 +22,14 @@ through an HT16K33A over I2C.
   **GP21** (5 V on J3 pin 1) drives the motherboard: high = turbo on.
   Speed changes play a segment spin animation (`SPIN_ANIMATION`,
   `SPIN_MS`, `SPIN_FRAME_MS`).
-- **Reset**: button A (SW1) is mirrored to **GP20** (5 V on J3 pin 3) by
-  pin interrupt: idles high, pulled low while pressed
-  (`RESET_ACTIVE_HIGH = False`), matching motherboard reset headers.
-  The display shows `---` for `RESET_FLASH_MS` while rebooting.
+- **Reset**: button A (SW1) is mirrored to **GP20** by pin interrupt:
+  idles low, driven high while pressed (`RESET_ACTIVE_HIGH = True`).
+  GP20 drives a PC817 optocoupler LED through 330 Ω; the opto's
+  phototransistor switches the PC's own 5 V into its active-high reset
+  input (~3 kΩ pull-down), galvanically isolating the line. The
+  RP2040's pins-low boot state leaves the opto dark, so Pico
+  reboots/deploys can't reset the PC. The display shows `---` for
+  `RESET_FLASH_MS` while rebooting.
 - The **HDD** LED mirrors disk activity on every input in
   `HDD_INPUTS` — by default GP28 (direct sense loom on the mobo HDD
   LED header, active low) and GP18 (TXB channel on J3 pin 7, active

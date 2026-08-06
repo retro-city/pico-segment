@@ -26,12 +26,14 @@ SPIN_ANIMATION = True
 SPIN_MS = 300        # total animation time
 SPIN_FRAME_MS = 30   # time per frame (lower = faster spin)
 
-# Reset passthrough: button A (SW1) is mirrored to GP20 (5 V on J3
-# pin 3), through an NPN emitter follower to the motherboard's
-# active-high reset input (~3k pull-down, too heavy for the TXB0104
-# alone). GP20 idles low, goes high while pressed.
+# Reset passthrough: button A (SW1) is mirrored to GP20, which drives
+# a PC817 optocoupler LED through 330R. The opto's phototransistor
+# switches the PC's own 5 V into its active-high reset input (~3k
+# pull-down), so the line is galvanically isolated. GP20 idles low
+# (opto dark), goes high while pressed; the RP2040's pins-low boot
+# state leaves the PC alone.
 RESET_OUT_PIN = 20
-RESET_ACTIVE_HIGH = True
+RESET_ACTIVE_HIGH = True  # GP20 high = opto LED on = reset asserted
 
 # The display shows --- for this long when reset is pressed.
 RESET_FLASH_MS = 300
