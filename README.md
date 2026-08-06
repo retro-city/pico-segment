@@ -32,8 +32,8 @@ through an HT16K33A over I2C.
   `RESET_FLASH_MS` while rebooting.
 - The **HDD** LED mirrors disk activity on every input in
   `HDD_INPUTS` — by default GP28 (direct sense loom on the mobo HDD
-  LED header, active low) and GP18 (TXB channel on J3 pin 7, active
-  high); any active line lights it. Pulses are caught by interrupt and
+  LED header, active low) and GP18 (TXB channel on J3 pin 7, pulled
+  low by an opto on activity); any active line lights it. Pulses are caught by interrupt and
   stretched to `HDD_MIN_ON_MS` so short bursts stay visible.
 - Easter egg: hold reset for 5 s (`EGG_HOLD_MS`).
 

@@ -56,10 +56,12 @@ HDD_LED = GREEN
 # oscillate.
 #  - GP28: direct sense loom (mobo LED- pin, 10k pull-up to 3V3, 10k
 #    series); the open-collector source sinks it low on activity.
-#  - GP18: TXB0104 channel on J3 pin 7; driven high on activity.
+#  - GP18: TXB0104 channel on J3 pin 7; a PC817 opto (collector on
+#    the line, emitter to GND) sinks it low on activity. The kick
+#    logic drives the TXB latch back to idle-high after each release.
 HDD_INPUTS = (
     (28, True, True),
-    (18, False, False),
+    (18, True, False),
 )
 
 # Minimum time the HDD LED stays lit per activity pulse, so very short
