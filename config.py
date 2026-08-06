@@ -47,9 +47,18 @@ POWER_LED = RED
 TURBO_LED = YELLOW
 HDD_LED = GREEN
 
-# Motherboard HDD activity input on GP18 (via J3 pin 7 / TXB0104).
-# This motherboard drives the line high during activity.
-HDD_ACTIVE_LOW = False
+# HDD activity inputs: (pin, active_low, idle_bias) — ANY line
+# reading active lights the LED. idle_bias pulls the pin toward its
+# idle level so a disconnected line stays quiet; use it ONLY on direct
+# GPIO lines — a pull fighting a TXB channel's keeper makes the line
+# oscillate.
+#  - GP28: direct sense loom (mobo LED- pin, 10k pull-up to 3V3, 10k
+#    series); the open-collector source sinks it low on activity.
+#  - GP18: TXB0104 channel on J3 pin 7; driven high on activity.
+HDD_INPUTS = (
+    (28, True, True),
+    (18, False, False),
+)
 
 # Minimum time the HDD LED stays lit per activity pulse, so very short
 # bursts are still visible.

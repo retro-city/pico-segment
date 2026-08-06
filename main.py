@@ -16,7 +16,7 @@ Behavior:
     current turbo state blinks; A = +1 MHz, B = -1 MHz (hold to
     repeat), A+B together saves and exits. The reset output to the
     motherboard is suspended while setup is open.
-  - The HDD LED mirrors the motherboard HDD activity signal on GP18,
+  - The HDD LED mirrors activity on every input in config.HDD_INPUTS,
     with short pulses latched by IRQ and stretched so they stay
     visible, and the level shifter's latch kicked back to idle.
 """
@@ -30,7 +30,7 @@ from ht16k33_seg import SegmentDisplay
 
 BTN_TURBO = Pin(7, Pin.IN)   # SW2 / BUTT-B, active low, external pull-up
 BTN_RESET = Pin(8, Pin.IN)   # SW1 / BUTT-A, active low, external pull-up
-HDD_IN = Pin(18, Pin.IN)     # HDD activity from motherboard via TXB0104
+# HDD activity inputs are built in the HDD section below (HDD_LINES)
 TURBO_OUT = Pin(config.TURBO_OUT_PIN, Pin.OUT)
 RESET_OUT = Pin(config.RESET_OUT_PIN, Pin.OUT)
 
@@ -150,35 +150,72 @@ def set_reset_mirror(enabled):
         RESET_OUT.value(0 if config.RESET_ACTIVE_HIGH else 1)  # inactive
 
 
-# --- HDD activity input ------------------------------------------------
+# --- HDD activity inputs -----------------------------------------------
 
 hdd_pulse = False
-_HDD_TRIG = Pin.IRQ_FALLING if config.HDD_ACTIVE_LOW else Pin.IRQ_RISING
 
 
-def _hdd_irq(_pin):
+def _hdd_irq(pin):
     global hdd_pulse
     hdd_pulse = True
+    # Disarm until the LED turns off again: a noisy/toggling line can
+    # otherwise fire IRQs faster than the loop runs and starve the
+    # buttons. IRQs only ever LIGHT the LED; polling keeps it lit.
+    pin.irq(handler=None)
+
+
+class HddLine:
+    """One activity input; any line reading active lights the LED."""
+
+    def __init__(self, pin_no, active_low, idle_bias=False):
+        self.active_low = active_low
+        self.trig = Pin.IRQ_FALLING if active_low else Pin.IRQ_RISING
+        # idle_bias: pull toward the idle level so a disconnected line
+        # reads "no activity" instead of floating at threshold. Only
+        # for direct GPIO lines — a pull fighting a TXB channel's
+        # keeper re-triggers its one-shots and the line oscillates.
+        if idle_bias:
+            self.pull = Pin.PULL_UP if active_low else Pin.PULL_DOWN
+        else:
+            self.pull = None
+        self.pin = Pin(pin_no, Pin.IN, self.pull)
+
+    def arm(self):
+        self.pin.irq(handler=_hdd_irq, trigger=self.trig)
+
+    def active(self):
+        return self.pin.value() == (0 if self.active_low else 1)
+
+    def kick(self):
+        """Re-arm after the source releases the line.
+
+        A source that only drives the active level leaves the TXB
+        latched, so the line would read active forever. Briefly driving
+        the idle level from this side resets it; a genuinely driven
+        line overpowers the pulse and reads active again immediately.
+        Harmless no-op for the direct-GPIO loom.
+        """
+        self.pin.init(Pin.OUT, value=1 if self.active_low else 0)
+        time.sleep_us(20)
+        self.pin.init(Pin.IN, self.pull)
+        time.sleep_us(50)  # let the line settle before it is read again
+
+
+HDD_LINES = [HddLine(*entry) for entry in config.HDD_INPUTS]
+
+
+def arm_hdd_lines():
+    for line in HDD_LINES:
+        line.arm()
 
 
 def hdd_active():
-    return HDD_IN.value() == (0 if config.HDD_ACTIVE_LOW else 1)
+    return any(line.active() for line in HDD_LINES)
 
 
 def kick_hdd_line():
-    """Re-arm the HDD input after the motherboard releases it.
-
-    The motherboard only ever drives the active level; when it lets go,
-    the TXB0104 level shifter holds whatever was driven last, so the
-    line would read active forever. Briefly driving the idle level from
-    this side resets it. If the motherboard is still mid-activity it
-    overpowers the shifter immediately and we get a fresh IRQ edge.
-    """
-    HDD_IN.init(Pin.OUT, value=1 if config.HDD_ACTIVE_LOW else 0)
-    time.sleep_us(20)
-    HDD_IN.init(Pin.IN)
-    HDD_IN.irq(handler=_hdd_irq, trigger=_HDD_TRIG)
-    time.sleep_us(50)  # let the line settle before it is read again
+    for line in HDD_LINES:
+        line.kick()
 
 
 # --- display bits -------------------------------------------------------
@@ -329,10 +366,10 @@ def run():
     disp.led(config.POWER_LED, True)   # power LED stays on from here
     disp.led(config.TURBO_LED, settings.turbo)
 
-    # Catch HDD pulses shorter than the polling interval, and normalize
-    # the level shifter's power-on state (it may have latched garbage).
-    HDD_IN.irq(handler=_hdd_irq, trigger=_HDD_TRIG)
+    # Normalize the level shifter's power-on state (it may have latched
+    # garbage), then listen for the first pulse.
     kick_hdd_line()
+    arm_hdd_lines()
 
     btn_a = DebouncedPin(BTN_RESET)
     btn_b = DebouncedPin(BTN_TURBO)
@@ -385,6 +422,10 @@ def run():
                 toggle_turbo()
 
         # --- HDD LED -------------------------------------------------
+        # An IRQ only ever LIGHTS the LED; while lit, polling keeps it
+        # alive and the edge IRQs stay disarmed — a continuously
+        # toggling line cannot fire more than one IRQ per LED cycle,
+        # so it can never starve this loop.
         if hdd_pulse:
             hdd_pulse = False
             hdd_off_at = time.ticks_add(now, config.HDD_MIN_ON_MS)
@@ -393,11 +434,12 @@ def run():
                 disp.led(config.HDD_LED, True)
         elif hdd_lit and time.ticks_diff(now, hdd_off_at) >= 0:
             kick_hdd_line()
-            if hdd_active():  # motherboard is genuinely still driving
+            if hdd_active():  # source is genuinely still driving
                 hdd_off_at = time.ticks_add(now, config.HDD_MIN_ON_MS)
             else:
                 hdd_lit = False
                 disp.led(config.HDD_LED, False)
+                arm_hdd_lines()  # dark again — listen for the next burst
 
         time.sleep_ms(10)
 

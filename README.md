@@ -26,9 +26,11 @@ through an HT16K33A over I2C.
   pin interrupt: idles high, pulled low while pressed
   (`RESET_ACTIVE_HIGH = False`), matching motherboard reset headers.
   The display shows `---` for `RESET_FLASH_MS` while rebooting.
-- The **HDD** LED mirrors the motherboard HDD activity signal on GP18
-  (J3 pin 7). Pulses are caught by interrupt and stretched to
-  `HDD_MIN_ON_MS` so short bursts stay visible.
+- The **HDD** LED mirrors disk activity on every input in
+  `HDD_INPUTS` — by default GP28 (direct sense loom on the mobo HDD
+  LED header, active low) and GP18 (TXB channel on J3 pin 7, active
+  high); any active line lights it. Pulses are caught by interrupt and
+  stretched to `HDD_MIN_ON_MS` so short bursts stay visible.
 - Easter egg: hold reset for 5 s (`EGG_HOLD_MS`).
 
 LED roles default to power = LED2 (red), turbo = LED3 (yellow),
