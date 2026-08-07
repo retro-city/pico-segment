@@ -116,3 +116,15 @@ pushes the buffer in one I2C write.
 
 Note: HT16K33 brightness and blink are chip-wide — they affect the digits and
 the three status LEDs together.
+
+## License
+
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
+
+Bundled third-party components keep their own licenses: `tools/vendor/`
+contains unmodified copies of
+[mpremote](https://github.com/micropython/micropython/tree/master/tools/mpremote)
+and [platformdirs](https://github.com/tox-dev/platformdirs), both MIT
+(license texts in their `.dist-info/licenses/` directories), and
+`firmware/RPI_PICO_W-v1.28.0.uf2` is the official MicroPython build for
+the Pico W (also MIT).

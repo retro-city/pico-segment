@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Vidar Waagbø
 """User settings for the front panel controller. Edit and re-deploy.
 
 Speeds and turbo state are DEFAULTS for the first boot only: the

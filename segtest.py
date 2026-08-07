@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Vidar Waagbø
 """Board verification: light every wired LED element one at a time.
 
 Run from the host with:  tools/mpr run segtest.py

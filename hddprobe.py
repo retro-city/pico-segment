@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Vidar Waagbø
 """HDD line probe: measure activity, pulse widths, and TXB latching
 on every input in config.HDD_INPUTS at once.
 

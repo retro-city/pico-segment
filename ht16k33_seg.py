@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Vidar Waagbø
 """Driver for the Retro PC 7-segment display board.
 
 Hardware (from KiCad schematics, Retro_PC-7_egment_display):

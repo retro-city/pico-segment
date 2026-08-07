@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Vidar Waagbø
 """Retro PC front panel controller, runs at boot.
 
 Behavior:
