@@ -38,12 +38,14 @@ through an HT16K33A over I2C.
   edges make the TXB oscillate, which would storm an IRQ — its latch
   holds each pulse until polled instead). Pulses are stretched to
   `HDD_MIN_ON_MS` so short bursts stay visible.
-- Easter egg: hold reset for 5 s (`EGG_HOLD_MS`).
+- Easter egg: hold reset for `EGG_HOLD_MS` (default 1 s).
 
-LED roles default to power = LED2 (red), turbo = LED3 (yellow),
-HDD = LED4 (green); remap them in `config.py`. `HDD_ACTIVE_LOW = True`
-assumes the motherboard pulls the line low during activity — flip it if the
-LED works inverted.
+LED roles default to power = LED2, turbo = LED3, HDD = LED4; remap them
+in `config.py`. The code names the positions `RED`/`YELLOW`/`GREEN`
+after the originally fitted colors, but the physical LEDs have since
+been swapped for period-correct ones, so treat the names as positions.
+Each `HDD_INPUTS` entry carries its own `active_low` flag — flip a
+line's flag if its LED works inverted.
 
 ## Hardware map (from the KiCad schematics)
 
@@ -53,11 +55,11 @@ LED works inverted.
 | HT16K33A address | **0x70** (28-SSOP has no address pins) |
 | Digits 1–3 (left→right) | COM0, COM1, COM2 |
 | Segments | ROW0=A, ROW1=B, ROW2=C, ROW3=D, ROW4=E, ROW5=F, ROW6=G, ROW7=DP |
-| Red LED (LED2) | ROW8, cathode on COM3 |
-| Yellow LED (LED3) | ROW9, cathode on COM3 |
-| Green LED (LED4) | ROW10, cathode on COM3 |
+| LED2 (`RED` in code) | ROW8, cathode on COM3 |
+| LED3 (`YELLOW` in code) | ROW9, cathode on COM3 |
+| LED4 (`GREEN` in code) | ROW10, cathode on COM3 |
 | Button SW1 / SW2 / J1 | GP8 / GP7 / GP6, active low, 10k pull-ups |
-| GP18–21 | level-shifted to 5 V on header J3 (unused here) |
+| GP18–21 | level-shifted to 5 V on J3 (odd pins signals, even pins GND): GP21 = turbo out (J3-1), GP20 = reset out (J3-3), GP19 = spare (J3-5), GP18 = HDD in (J3-7) |
 
 ## Files
 
