@@ -6,8 +6,8 @@ through an HT16K33A over I2C.
 
 ## Behavior
 
-- The display shows the CPU speed: `mhz_turbo` (default 133) while turbo
-  is on, `mhz_normal` (default 66) while it is off. Speeds and turbo
+- The display shows the CPU speed: `mhz_turbo` (default 166) while turbo
+  is on, `mhz_normal` (default 133) while it is off. Speeds and turbo
   state persist in `settings.json` on the Pico; `config.py` only
   provides first-boot defaults (delete `settings.json` to reset).
 - **Setup mode**: hold A+B for 2 s (display shows `SEt`, release, value
@@ -19,12 +19,13 @@ through an HT16K33A over I2C.
 - At power-on all three LEDs light for 2 seconds (lamp test), then only the
   **power** LED stays lit. Turbo starts on (`TURBO_ON_AT_BOOT`).
 - **Turbo** toggles with button B (SW2). The turbo LED follows it, and
-  **GP21** (5 V on J3 pin 1) drives the motherboard: high = turbo on.
+  **GP20** (5 V on J3 pin 3) drives the motherboard: high = turbo on.
   Speed changes play a segment spin animation (`SPIN_ANIMATION`,
   `SPIN_MS`, `SPIN_FRAME_MS`).
-- **Reset**: button A (SW1) is mirrored to **GP20** by pin interrupt:
-  idles low, driven high while pressed (`RESET_ACTIVE_HIGH = True`).
-  GP20 drives a PC817 optocoupler LED through 330 Ω; the opto's
+- **Reset**: button A (SW1) is mirrored to **GP21** (J3 pin 1) by pin
+  interrupt: idles low, driven high while pressed
+  (`RESET_ACTIVE_HIGH = True`).
+  GP21 drives a PC817 optocoupler LED through 330 Ω; the opto's
   phototransistor switches the PC's own 5 V into its active-high reset
   input (~3 kΩ pull-down), galvanically isolating the line. The
   RP2040's pins-low boot state leaves the opto dark, so Pico
@@ -38,6 +39,13 @@ through an HT16K33A over I2C.
   edges make the TXB oscillate, which would storm an IRQ — its latch
   holds each pulse until polled instead). Pulses are stretched to
   `HDD_MIN_ON_MS` so short bursts stay visible.
+- **Lock**: J1 (button C) is a maintained keyboard-lock switch and
+  **GP19** (5 V on J3 pin 5) follows its position, high = locked
+  (`LOCK_ACTIVE_HIGH`; `LOCK_SWITCH_ACTIVE_LOW` sets which way the
+  switch reads). Nothing is persisted — the switch is read again at
+  every boot. There is no spare LED, so the display is the indicator:
+  it reads `LOC` (`LOCK_TEXT`) in place of the speed for as long as the
+  switch is locked. Setup mode still shows the MHz being edited.
 - Easter egg: hold reset for `EGG_HOLD_MS` (default 1 s).
 
 LED roles default to power = LED2, turbo = LED3, HDD = LED4; remap them
@@ -58,8 +66,8 @@ line's flag if its LED works inverted.
 | LED2 (`RED` in code) | ROW8, cathode on COM3 |
 | LED3 (`YELLOW` in code) | ROW9, cathode on COM3 |
 | LED4 (`GREEN` in code) | ROW10, cathode on COM3 |
-| Button SW1 / SW2 / J1 | GP8 / GP7 / GP6, active low, 10k pull-ups |
-| GP18–21 | level-shifted to 5 V on J3 (odd pins signals, even pins GND): GP21 = turbo out (J3-1), GP20 = reset out (J3-3), GP19 = spare (J3-5), GP18 = HDD in (J3-7) |
+| Button A / B / C | SW1 / SW2 / J1 on GP8 / GP7 / GP6, active low, 10k pull-ups |
+| GP18–21 | level-shifted to 5 V on J3 (odd pins signals, even pins GND): GP21 = reset out (J3-1), GP20 = turbo out (J3-3), GP19 = lock out (J3-5), GP18 = HDD in (J3-7) |
 
 ## Files
 

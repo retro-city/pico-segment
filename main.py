@@ -8,12 +8,15 @@ Behavior:
     settings.json; config.py supplies first-boot defaults.
   - All three LEDs light for 2 s at power-on, then only the power LED
     stays lit.
-  - Button B (SW2, GP7) toggles turbo: turbo LED follows, GP21 (5 V on
-    J3 pin 1) drives the motherboard (high = turbo on), state is saved,
+  - Button B (SW2, GP7) toggles turbo: turbo LED follows, GP20 (5 V on
+    J3 pin 3) drives the motherboard (high = turbo on), state is saved,
     and the speed change plays a spin animation.
-  - Button A (SW1, GP8) is the reset button, mirrored to GP20 (5 V on
-    J3 pin 3) with config polarity; the display flashes ---.
+  - Button A (SW1, GP8) is the reset button, mirrored to GP21 (5 V on
+    J3 pin 1) with config polarity; the display flashes ---.
     Hold A alone for a second for a surprise.
+  - J1 (button C, GP6) is a maintained keyboard-lock switch: GP19
+    (5 V on J3 pin 5) follows its position with config polarity, and
+    the display reads LOC instead of the speed while it is locked.
   - Hold A+B for SETUP_HOLD_MS to enter setup: the speed for the
     current turbo state blinks; A = +1 MHz, B = -1 MHz (hold to
     repeat), A+B together saves and exits. The reset output to the
@@ -33,9 +36,11 @@ from ht16k33_seg import SegmentDisplay
 
 BTN_TURBO = Pin(7, Pin.IN)   # SW2 / BUTT-B, active low, external pull-up
 BTN_RESET = Pin(8, Pin.IN)   # SW1 / BUTT-A, active low, external pull-up
+BTN_LOCK = Pin(6, Pin.IN)    # J1 / BUTT-C, active low, external pull-up
 # HDD activity inputs are built in the HDD section below (HDD_LINES)
 TURBO_OUT = Pin(config.TURBO_OUT_PIN, Pin.OUT)
 RESET_OUT = Pin(config.RESET_OUT_PIN, Pin.OUT)
+LOCK_OUT = Pin(config.LOCK_OUT_PIN, Pin.OUT)
 
 COMBO_GRACE_MS = 200   # window for the second button of the A+B combo
 STEP_GRACE_MS = 150    # setup: tell a +-1 step apart from an A+B save
@@ -144,13 +149,34 @@ def _mirror_reset(pin=BTN_RESET):
 
 
 def set_reset_mirror(enabled):
-    """Enable/disable the button-A -> GP20 mirror (off during setup)."""
+    """Enable/disable the button-A -> GP21 mirror (off during setup)."""
     global _reset_mirror_on
     _reset_mirror_on = enabled
     if enabled:
         _mirror_reset()
     else:
         RESET_OUT.value(0 if config.RESET_ACTIVE_HIGH else 1)  # inactive
+
+
+# --- keyboard lock ------------------------------------------------------
+
+locked = False  # last known position of the maintained J1 switch
+
+
+def lock_engaged(low):
+    """True when the maintained J1 switch sits in the locked position.
+
+    `low` is the debounced pin level, True meaning the contact is
+    closed to ground.
+    """
+    return low if config.LOCK_SWITCH_ACTIVE_LOW else not low
+
+
+def set_lock_out(is_locked):
+    """Drive the lock output, and remember it for the display."""
+    global locked
+    locked = is_locked
+    LOCK_OUT.value(is_locked if config.LOCK_ACTIVE_HIGH else not is_locked)
 
 
 # --- HDD activity inputs -----------------------------------------------
@@ -345,15 +371,18 @@ def run():
     settings = Settings()
     disp = SegmentDisplay(brightness=config.BRIGHTNESS)
     TURBO_OUT.value(settings.turbo)  # tell the motherboard first
+    set_lock_out(lock_engaged(BTN_LOCK.value() == 0))
 
-    # Reset button passes straight through to GP20, by interrupt so it
+    # Reset button passes straight through to GP21, by interrupt so it
     # tracks even while the boot delay or spin animation is running.
     _mirror_reset()
     BTN_RESET.irq(handler=_mirror_reset,
                   trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING)
 
     def show_speed():
-        if settings.turbo or settings.mhz_normal is None:
+        if locked:
+            disp.show(config.LOCK_TEXT)  # the lock has no LED of its own
+        elif settings.turbo or settings.mhz_normal is None:
             show_mhz(disp, settings.mhz_turbo)
         else:
             show_mhz(disp, settings.mhz_normal)
@@ -383,6 +412,7 @@ def run():
 
     btn_a = DebouncedPin(BTN_RESET)
     btn_b = DebouncedPin(BTN_TURBO)
+    btn_c = DebouncedPin(BTN_LOCK)
     b_pend = None       # B press waiting out the combo grace window
     combo_since = None  # when both buttons became held
     egg_armed = False
@@ -430,6 +460,13 @@ def run():
                     time.ticks_diff(now, b_pend) >= COMBO_GRACE_MS:
                 b_pend = None
                 toggle_turbo()
+
+        # --- J1: keyboard lock follows the maintained switch --------
+        # Debounced rather than mirrored by IRQ, so the contact's
+        # bounce does not chatter the opto on every throw.
+        if btn_c.update():
+            set_lock_out(lock_engaged(btn_c.down))
+            show_speed()  # LOC while locked, the speed again once released
 
         # --- HDD LED -------------------------------------------------
         # Direct lines report by IRQ (which disarms itself until the

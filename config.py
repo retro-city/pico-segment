@@ -10,8 +10,8 @@ toggle and setup-mode save). Delete that file to return to these.
 from ht16k33_seg import RED, YELLOW, GREEN
 
 # Speeds shown on the 3-digit display.
-MHZ_TURBO = 133    # shown while turbo is on
-MHZ_NORMAL = 66    # shown while turbo is off (None = always show MHZ_TURBO)
+MHZ_TURBO = 166     # shown while turbo is on
+MHZ_NORMAL = 133    # shown while turbo is off (None = always show MHZ_TURBO)
 
 # Turbo state at power-on.
 TURBO_ON_AT_BOOT = True
@@ -19,23 +19,35 @@ TURBO_ON_AT_BOOT = True
 # Hold buttons A+B this long to enter setup mode (adjust MHz, A+B saves).
 SETUP_HOLD_MS = 2000
 
-# Turbo output to the motherboard: GP21, level-shifted to 5 V on J3 pin 1.
+# Turbo output to the motherboard: GP20, level-shifted to 5 V on J3 pin 3.
 # High = turbo on.
-TURBO_OUT_PIN = 21
+TURBO_OUT_PIN = 20
+
+# Keyboard-lock output to the motherboard: GP19, level-shifted to 5 V
+# on J3 pin 5, driving an optocoupler LED. J1 (button C, GP6) is a
+# maintained switch, so the output just follows its position — there is
+# no saved state, and the switch is read again at every boot.
+LOCK_OUT_PIN = 19
+LOCK_ACTIVE_HIGH = True        # GP19 high = opto LED on = lock asserted
+LOCK_SWITCH_ACTIVE_LOW = True  # J1 closed (GP6 pulled low) = locked
+
+# Shown in place of the speed while locked, since the lock has no LED
+# of its own.
+LOCK_TEXT = 'LOC'
 
 # Fun segment-ring spin on the display when the speed changes.
 SPIN_ANIMATION = True
 SPIN_MS = 300        # total animation time
 SPIN_FRAME_MS = 30   # time per frame (lower = faster spin)
 
-# Reset passthrough: button A (SW1) is mirrored to GP20, which drives
-# a PC817 optocoupler LED through 330R. The opto's phototransistor
-# switches the PC's own 5 V into its active-high reset input (~3k
-# pull-down), so the line is galvanically isolated. GP20 idles low
-# (opto dark), goes high while pressed; the RP2040's pins-low boot
-# state leaves the PC alone.
-RESET_OUT_PIN = 20
-RESET_ACTIVE_HIGH = True  # GP20 high = opto LED on = reset asserted
+# Reset passthrough: button A (SW1) is mirrored to GP21 (J3 pin 1),
+# which drives a PC817 optocoupler LED through 330R. The opto's
+# phototransistor switches the PC's own 5 V into its active-high reset
+# input (~3k pull-down), so the line is galvanically isolated. GP21
+# idles low (opto dark), goes high while pressed; the RP2040's
+# pins-low boot state leaves the PC alone.
+RESET_OUT_PIN = 21
+RESET_ACTIVE_HIGH = True  # GP21 high = opto LED on = reset asserted
 
 # The display shows --- for this long when reset is pressed.
 RESET_FLASH_MS = 300
