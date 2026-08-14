@@ -1,0 +1,95 @@
+# Builds the all-in-one UF2 images on a release tag and attaches them to
+# the GitHub release. Runs on a plain tag push as well, creating the
+# release if it does not exist yet, so either order works.
+name: Release firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # MicroPython the images are built from. Keep in step with the version
+  # named in firmware/ and the README.
+  MPY_REF: v1.28.0
+  BOARDS: RPI_PICO_W RPI_PICO
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the panel
+        uses: actions/checkout@v4
+        with:
+          path: segment1911
+
+      # build.sh looks for MicroPython next to the repo, which is where
+      # this lands it.
+      - name: Check out MicroPython ${{ env.MPY_REF }}
+        uses: actions/checkout@v4
+        with:
+          repository: micropython/micropython
+          ref: ${{ env.MPY_REF }}
+          path: micropython
+
+      - name: Install the ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+              gcc-arm-none-eabi libnewlib-arm-none-eabi cmake ninja-build
+
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross -j"$(nproc)"
+
+      - name: Build the images
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tag="${{ github.event.release.tag_name || github.ref_name }}"
+          for board in $BOARDS; do
+              # Submodules differ per board (the W pulls in cyw43/lwip/
+              # mbedtls/btstack), so fetch them for each.
+              make -C micropython/ports/rp2 BOARD="$board" submodules
+              BOARD="$board" \
+              MPY_DIR="$GITHUB_WORKSPACE/micropython" \
+              MPY_VERSION="$MPY_REF" \
+                  segment1911/firmware/build.sh
+              # Name the asset after the panel release and the board; the
+              # MicroPython version goes in the release notes instead.
+              cp "segment1911/out/segment1911-$board-$MPY_REF.uf2" \
+                 "dist/segment1911-$tag-$board.uf2"
+          done
+          ls -l dist
+
+      - name: Check the images carry the frozen code
+        run: python3 segment1911/firmware/verify_uf2.py dist/*.uf2
+
+      - name: Upload as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: uf2
+          path: dist/*.uf2
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || github.ref_name }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+              gh release create "$tag" --title "$tag" --generate-notes
+          fi
+          gh release upload "$tag" dist/*.uf2 --clobber

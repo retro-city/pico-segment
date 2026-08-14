@@ -78,6 +78,8 @@ line's flag if its LED works inverted.
 - `firmware/RPI_PICO_W-v1.28.0.uf2` — stock MicroPython for the Pico W
 - `firmware/manifest.py`, `firmware/build.sh` — build a UF2 with the
   panel frozen in (see [All-in-one UF2](#all-in-one-uf2))
+- `firmware/verify_uf2.py` — checks a built image is a sane RP2040 UF2
+  and really carries the frozen code
 - `tools/mpr` — vendored `mpremote` wrapper (this machine has no pip; only
   system `pyserial` is needed)
 
@@ -115,8 +117,13 @@ BOARD=RPI_PICO firmware/build.sh   # -> out/segment1911-RPI_PICO-*.uf2
 ```
 
 Needs `arm-none-eabi-gcc`, `cmake`, `make` and `git`; `MPY_DIR` overrides
-where the MicroPython tree lives. The build takes a few minutes the first
-time because it compiles `picotool` too.
+where the MicroPython tree lives and `MPY_VERSION` overrides the version
+in the filename. The build takes a few minutes the first time because it
+compiles `picotool` too.
+
+Pushing a `v*` tag builds both images in CI and attaches them to the
+GitHub release as `segment1911-<tag>-<board>.uf2`
+(`.github/workflows/release.yml`).
 
 **Match the image to the board.** A Pico W image on a genuine non-W Pico
 hangs before `main.py` runs, so the display stays blank: the boot code
