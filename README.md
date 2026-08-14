@@ -75,7 +75,9 @@ line's flag if its LED works inverted.
 - `config.py` — user settings: speed, LED roles, HDD polarity, brightness
 - `main.py` — the front panel controller described above
 - `segtest.py` — board check: lights each segment/LED one at a time
-- `firmware/RPI_PICO_W-v1.28.0.uf2` — MicroPython for the Pico W
+- `firmware/RPI_PICO_W-v1.28.0.uf2` — stock MicroPython for the Pico W
+- `firmware/manifest.py`, `firmware/build.sh` — build a UF2 with the
+  panel frozen in (see [All-in-one UF2](#all-in-one-uf2))
 - `tools/mpr` — vendored `mpremote` wrapper (this machine has no pip; only
   system `pyserial` is needed)
 
@@ -94,6 +96,43 @@ tools/mpr cp ht16k33_seg.py config.py main.py segtest.py :   # copy to board
 tools/mpr run segtest.py                           # verify every segment/LED
 tools/mpr reset                                    # reboot -> front panel runs
 ```
+
+## All-in-one UF2
+
+`firmware/build.sh` bakes the panel code into a MicroPython image, so a
+board is set up by flashing one file — no `mpremote`, no serial port, no
+copying scripts. Hold BOOTSEL while plugging the Pico in and drop the
+image for that board from `out/` onto the `RPI-RP2` drive. Released
+builds are attached to the GitHub release for the tag.
+
+```sh
+git clone --depth 1 --branch v1.28.0 \
+    https://github.com/micropython/micropython.git ../micropython
+make -C ../micropython/mpy-cross
+make -C ../micropython/ports/rp2 BOARD=RPI_PICO_W submodules
+firmware/build.sh                  # -> out/segment1911-RPI_PICO_W-*.uf2
+BOARD=RPI_PICO firmware/build.sh   # -> out/segment1911-RPI_PICO-*.uf2
+```
+
+Needs `arm-none-eabi-gcc`, `cmake`, `make` and `git`; `MPY_DIR` overrides
+where the MicroPython tree lives. The build takes a few minutes the first
+time because it compiles `picotool` too.
+
+**Match the image to the board.** A Pico W image on a genuine non-W Pico
+hangs before `main.py` runs, so the display stays blank: the boot code
+arms a *level-high* interrupt on GP24 for the CYW43's host-wake line
+(`ports/rp2/mpnetworkport.c`), and on a plain Pico GP24 is the VBUS
+sense pin, held high whenever USB power is present. The interrupt then
+re-fires forever. Many clone boards leave GP24 low or floating and so
+survive the mismatch, which makes it look board-specific rather than
+firmware-specific.
+
+Frozen modules are read-only and live beside the filesystem, which still
+holds the writable `settings.json`. `sys.path` is `['', '.frozen']`, so a
+`config.py` copied onto the board shadows the frozen one — speeds, LED
+roles and polarities can still be changed without rebuilding. `main.py`
+is the exception: the boot code looks for a frozen `main.py` *before* the
+filesystem one, so changing it means a rebuild.
 
 ## Using the driver interactively
 
