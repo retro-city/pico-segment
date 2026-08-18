@@ -128,6 +128,9 @@ line's flag if its LED works inverted.
 - `sounds/spinup.wav` — the default boot sound; `tools/mkspinup.py` made it
 - `sounds/DING.WAV`, `sounds/ding.wav` — the Windows 95 ding, as found and
   normalized to full scale (`wav2boot.py --normalize`)
+- `sounds/beep4k.wav` — POST-style beep, full-scale 4 kHz square: the loudest
+  thing a 4 kHz piezo can make; `sounds/sweep.wav` — 0.5→10 kHz glide to hear
+  where a disc's resonance is (`tools/mktone.py` makes both)
 - `defaultsound.py` — the same WAV as a frozen module, seeded onto a fresh
   drive as `boot.wav` (`tools/mkdefaultsound.py` regenerates it)
 - `tools/wav2boot.py` — converts any WAV to the panel's 8-bit mono format
