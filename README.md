@@ -11,9 +11,9 @@ through an HT16K33A over I2C.
   state persist in `settings.json` on the Pico; `config.py` only
   provides first-boot defaults (delete `settings.json` to reset).
 - **Setup mode**: hold A+B for 2 s (display shows `SEt`, release, value
-  blinks). A = +1, B = −1, hold to auto-repeat; keep holding 2 s and
-  steps become ±10. A+B together saves and exits. The reset output is
-  suspended during setup. Above 999 MHz the display switches to GHz
+  blinks). B (the right-hand button) = +1, A = −1, hold to auto-repeat;
+  keep holding 2 s and steps become ±10. A+B saves and exits. The reset
+  output is suspended during setup. Above 999 MHz the display switches to GHz
   with a decimal point (`1.00` … `9.99`, 10 MHz per step); stepping
   down from `1.00` returns to `999`.
 - At power-on all three LEDs light for 2 seconds (lamp test), then only the

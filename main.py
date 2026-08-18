@@ -18,7 +18,7 @@ Behavior:
     (5 V on J3 pin 5) follows its position with config polarity, and
     the display reads LOC instead of the speed while it is locked.
   - Hold A+B for SETUP_HOLD_MS to enter setup: the speed for the
-    current turbo state blinks; A = +1 MHz, B = -1 MHz (hold to
+    current turbo state blinks; B = +1 MHz, A = -1 MHz (hold to
     repeat), A+B together saves and exits. The reset output to the
     motherboard is suspended while setup is open.
   - The HDD LED mirrors activity on every input in config.HDD_INPUTS:
@@ -332,8 +332,9 @@ def setup_mode(disp, settings, btn_a, btn_b):
     disp.blink(1)  # 2 Hz hardware blink marks setup mode
     show_mhz(disp, val)
 
-    step_a = Stepper(btn_a, +1)
-    step_b = Stepper(btn_b, -1)
+    # B (SW2) is the right-hand button, so it counts up; A counts down.
+    step_a = Stepper(btn_a, -1)
+    step_b = Stepper(btn_b, +1)
     while True:
         now = time.ticks_ms()
         edge_a = btn_a.update()
