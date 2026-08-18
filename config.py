@@ -85,32 +85,43 @@ HDD_INPUTS = (
 HDD_MIN_ON_MS = 50
 
 # HDD clicker. The CF card standing in for the hard disk is silent, so a
-# passive piezo imitates the seek chatter of a mechanical drive. One tick
-# is a short PWM burst; ticks repeat for as long as the activity LED is
-# lit, no closer together than CLICK_GAP_MS, so a brief access gives a
-# single click and a long transfer chatters instead of buzzing.
+# passive piezo imitates the seek noise of a mechanical drive.
 #
-# Wire a passive piezo between CLICK_PIN and any GND pin. A bare disc can
-# hang straight off the pin (it is capacitive and draws little at these
-# frequencies); ~100R in series is a harmless precaution. An ACTIVE
-# buzzer will not work — it has its own oscillator and ignores the tone.
+# There is no tone. A piezo disc clicks on a voltage EDGE -- it flexes
+# once and rings down at its own resonance -- and a plain DC step is what
+# the hardware HDD clickers feed theirs; a tone, however short, is a
+# beep. A seek is two edges: one as the head 'moves', another
+# CLICK_HOLD_MS later as it 'lands' (the table is cycled so seeks are not
+# all alike). Seeks repeat while the activity LED is lit, no closer than
+# CLICK_GAP_MS, so a brief access clicks once and a long transfer
+# chatters.
+#
+# Wire a passive piezo between CLICK_PIN and any GND pin; a bare disc can
+# hang straight off the pin (it is capacitive), ~100R in series is a
+# harmless precaution. Louder: set CLICK_PIN_B and put the piezo between
+# the two pins instead of to ground -- they are driven in antiphase, so
+# every edge swings 6.6 V rather than 3.3 V. An ACTIVE buzzer will not
+# work: it has its own oscillator and just drones while the line is high.
 CLICK_ENABLED = True
 CLICK_PIN = 22
-CLICK_FREQS = (1800, 2400, 2050, 2700)  # cycled, so ticks are not identical
-CLICK_MS = 5          # length of one tick
-CLICK_DUTY = 32768    # 16-bit duty; half is the loudest square wave
-CLICK_GAP_MS = 60     # shortest spacing between ticks
+CLICK_PIN_B = None                      # e.g. 26 for push-pull drive
+CLICK_HOLD_MS = (18, 26, 14, 32, 22)    # move-to-land, per seek, cycled
+CLICK_GAP_MS = 60                       # shortest spacing between seeks
 
-# Simulated drive activity: hold button B alone this long and the HDD
-# LED flashes with matching ticks, so the clicker can be demoed and the
-# wiring checked without waiting for the disk to do something. The
-# uneven on/off lists are cycled, which reads as a drive working rather
-# than a blinking light. Holding B this long does NOT toggle turbo --
-# the toggle waits for the release, so a long hold claims the press.
-HDD_SIM_HOLD_MS = 3000
-HDD_SIM_PULSES = 14
-HDD_SIM_ON_MS = (20, 45, 30, 60)
-HDD_SIM_OFF_MS = (35, 20, 70, 25)
+# Hold button B alone this long to mute/unmute the clicker; the choice
+# is saved with the other settings. The display scrolls the new state.
+CLICK_MUTE_HOLD_MS = 3000
+CLICK_TEXT_ON = 'HDC On'
+CLICK_TEXT_OFF = 'HDC OFF'
+CLICK_TEXT_SCROLL_MS = 200
+
+# The drive burst played by the easter egg (hold reset): the HDD LED
+# flashes with a seek per flash, in these cycled uneven on/off times, so
+# it reads as a drive working rather than a blinking light. Doubles as a
+# way to check the piezo and LED without waiting for the disk.
+HDD_BURST_PULSES = 14
+HDD_BURST_ON_MS = (20, 45, 30, 60)
+HDD_BURST_OFF_MS = (35, 20, 70, 25)
 
 # Display brightness, 0..15.
 BRIGHTNESS = 15

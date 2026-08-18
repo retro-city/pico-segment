@@ -11,11 +11,12 @@ Behavior:
   - Button B (SW2, GP7) toggles turbo when released: turbo LED follows,
     GP20 (5 V on J3 pin 3) drives the motherboard (high = turbo on),
     state is saved, and the speed change plays a spin animation. Hold B
-    alone for HDD_SIM_HOLD_MS instead and it fakes a spell of drive
-    activity — LED flashes with matching ticks, no turbo toggle.
+    alone for CLICK_MUTE_HOLD_MS instead to mute/unmute the HDD
+    clicker (saved too); the display scrolls HDC On / HDC OFF.
   - Button A (SW1, GP8) is the reset button, mirrored to GP21 (5 V on
     J3 pin 1) with config polarity; the display flashes ---.
-    Hold A alone for a second for a surprise.
+    Hold A alone for a second for a surprise: a spell of faked drive
+    activity (HDD LED and clicker), then the scrolling text.
   - J1 (button C, GP6) is a maintained keyboard-lock switch: GP19
     (5 V on J3 pin 5) follows its position with config polarity, and
     the display reads LOC instead of the speed while it is locked.
@@ -23,8 +24,8 @@ Behavior:
     current turbo state blinks; B = +1 MHz, A = -1 MHz (hold to
     repeat), A+B together saves and exits. The reset output to the
     motherboard is suspended while setup is open.
-  - A passive piezo on CLICK_PIN ticks while the HDD LED is lit, so the
-    silent CF card still sounds like a mechanical drive seeking.
+  - A passive piezo on CLICK_PIN clicks while the HDD LED is lit, so
+    the silent CF card still sounds like a mechanical drive seeking.
   - The HDD LED mirrors activity on every input in config.HDD_INPUTS:
     direct GPIO lines by edge IRQ, TXB-backed lines by polling only —
     the TXB latches the active level until it is kicked back to idle,
@@ -33,7 +34,7 @@ Behavior:
 
 import json
 import time
-from machine import Pin, PWM
+from machine import Pin
 
 import config
 from ht16k33_seg import SegmentDisplay
@@ -83,6 +84,7 @@ class Settings:
         self.turbo = config.TURBO_ON_AT_BOOT
         self.mhz_turbo = config.MHZ_TURBO
         self.mhz_normal = config.MHZ_NORMAL
+        self.clicker = True  # sound on; CLICK_ENABLED decides if it exists
         try:
             with open(self.PATH) as f:
                 d = json.load(f)
@@ -90,6 +92,7 @@ class Settings:
             self.mhz_turbo = self._clamp(d.get('mhz_turbo', self.mhz_turbo))
             n = d.get('mhz_normal', self.mhz_normal)
             self.mhz_normal = None if n is None else self._clamp(n)
+            self.clicker = bool(d.get('clicker', self.clicker))
         except (OSError, ValueError):
             pass  # missing or corrupt file -> config.py defaults
 
@@ -102,7 +105,8 @@ class Settings:
             with open(self.PATH, 'w') as f:
                 json.dump({'turbo': self.turbo,
                            'mhz_turbo': self.mhz_turbo,
-                           'mhz_normal': self.mhz_normal}, f)
+                           'mhz_normal': self.mhz_normal,
+                           'clicker': self.clicker}, f)
         except OSError:
             pass  # keep running even if the flash write fails
 
@@ -260,61 +264,91 @@ def kick_hdd_line():
 # --- HDD clicker --------------------------------------------------------
 
 class Clicker:
-    """Piezo ticks standing in for a mechanical drive's seek noise.
+    """Piezo clicks standing in for a mechanical drive's seek noise.
 
-    A tick blocks for CLICK_MS, which hides inside the loop's own 10 ms
-    sleep: the reset mirror runs off an interrupt and the buttons
-    debounce over 30 ms, so nothing upstream notices the pause. Disabled
-    (or with no piezo fitted) the whole class is inert.
+    No tone. A piezo disc clicks on a voltage EDGE -- it flexes once and
+    rings down at its own resonance -- and a plain DC step is exactly
+    what the hardware HDD clickers feed theirs. A seek here is two
+    edges: one when the head 'moves', another CLICK_HOLD_MS later when
+    it 'lands', which reads as the tick-tock of a real actuator. Driving
+    a tone instead gives a beep, however short.
+
+    Nothing blocks. tick() flips the line and books the second edge;
+    service() delivers it from the main loop, whose 10 ms period adds a
+    little jitter that only helps. With CLICK_PIN_B set the piezo sits
+    between two pins driven in antiphase, so every edge swings twice
+    the supply -- the cheap way to make it louder. Disabled, or with no
+    piezo fitted, the class is inert.
     """
 
-    def __init__(self):
-        self.pwm = None
-        self.next_at = time.ticks_ms()
-        self._freq = 0
+    def __init__(self, muted=False):
+        self.pin_a = None
+        self.pin_b = None
+        self.muted = muted               # user's choice; the pin stays claimed
+        self.next_at = time.ticks_ms()   # earliest next seek
+        self.release_at = None           # when the pending second edge lands
+        self._pol = 0
+        self._i = 0
         if config.CLICK_ENABLED:
-            self.pwm = PWM(Pin(config.CLICK_PIN))
-            self.pwm.duty_u16(0)  # silent until something seeks
+            self.pin_a = Pin(config.CLICK_PIN, Pin.OUT, value=0)
+            if config.CLICK_PIN_B is not None:
+                self.pin_b = Pin(config.CLICK_PIN_B, Pin.OUT, value=1)
+
+    def _edge(self):
+        # Every edge reverses the voltage across the piezo. Single-ended
+        # that is 0 <-> 3V3; push-pull it is +3V3 <-> -3V3.
+        self._pol ^= 1
+        self.pin_a.value(self._pol)
+        if self.pin_b is not None:
+            self.pin_b.value(self._pol ^ 1)
 
     def tick(self, now, force=False):
-        """Click once, unless the previous tick was too recent.
+        """Start a seek, unless the previous one was too recent.
 
         `force` skips the rate limit, for callers that already decide
-        their own spacing (the simulated burst).
+        their own spacing (the drive burst in the easter egg).
         """
-        if self.pwm is None:
+        if self.pin_a is None or self.muted:
             return
         if not force and time.ticks_diff(now, self.next_at) < 0:
             return
-        # Rotate the pitch so sustained activity chatters like a head
-        # stepping around rather than beeping on one note.
-        self._freq = (self._freq + 1) % len(config.CLICK_FREQS)
-        self.pwm.freq(config.CLICK_FREQS[self._freq])
-        self.pwm.duty_u16(config.CLICK_DUTY)
-        time.sleep_ms(config.CLICK_MS)
-        self.pwm.duty_u16(0)
+        self._edge()  # head moves
+        holds = config.CLICK_HOLD_MS
+        self.release_at = time.ticks_add(now, holds[self._i % len(holds)])
+        self._i += 1  # walk the hold table so seeks are not all alike
         self.next_at = time.ticks_add(now, config.CLICK_GAP_MS)
 
-    def silence(self):
-        if self.pwm is not None:
-            self.pwm.duty_u16(0)
+    def service(self, now):
+        """Deliver the pending second edge once due. Call every loop."""
+        if self.release_at is not None and \
+                time.ticks_diff(now, self.release_at) >= 0:
+            self.release_at = None
+            self._edge()  # head lands
+
+    def pending(self):
+        return self.release_at is not None
 
 
 def hdd_burst(disp, clicker):
-    """Fake a spell of drive activity, for demoing without a disk.
+    """Fake a spell of drive activity, for the easter egg.
 
-    Flashes the HDD LED and ticks along with it, in uneven bursts so it
-    reads as a drive working rather than a blinking light. Blocking,
-    like the easter egg; the caller owns the LED afterwards.
+    Flashes the HDD LED and clicks along with it, in uneven bursts so it
+    reads as a drive working rather than a blinking light. Blocking, so
+    it services the clicker itself; the caller owns the LED afterwards.
     """
-    on = config.HDD_SIM_ON_MS
-    off = config.HDD_SIM_OFF_MS
-    for i in range(config.HDD_SIM_PULSES):
+    on = config.HDD_BURST_ON_MS
+    off = config.HDD_BURST_OFF_MS
+    for i in range(config.HDD_BURST_PULSES):
         disp.led(config.HDD_LED, True)
-        clicker.tick(time.ticks_ms(), force=True)  # one tick per flash
+        clicker.tick(time.ticks_ms(), force=True)  # one seek per flash
         time.sleep_ms(on[i % len(on)])
+        clicker.service(time.ticks_ms())
         disp.led(config.HDD_LED, False)
         time.sleep_ms(off[i % len(off)])
+        clicker.service(time.ticks_ms())
+    while clicker.pending():  # let the last seek land before moving on
+        time.sleep_ms(5)
+        clicker.service(time.ticks_ms())
 
 
 # --- display bits -------------------------------------------------------
@@ -331,8 +365,10 @@ def spin(disp):
         time.sleep_ms(config.SPIN_FRAME_MS)
 
 
-def easter_egg(disp):
+def easter_egg(disp, clicker):
+    """The drive 'loads' the message: seek burst first, then the text."""
     spin(disp)
+    hdd_burst(disp, clicker)
     disp.scroll(config.EGG_TEXT, config.EGG_SCROLL_MS)
     spin(disp)
 
@@ -474,12 +510,21 @@ def run():
     kick_hdd_line()
     arm_hdd_lines()
 
-    clicker = Clicker()
+    clicker = Clicker(muted=not settings.clicker)
+
+    def toggle_clicker():
+        settings.clicker = not settings.clicker
+        settings.save()
+        clicker.muted = not settings.clicker
+        disp.scroll(config.CLICK_TEXT_ON if settings.clicker
+                    else config.CLICK_TEXT_OFF, config.CLICK_TEXT_SCROLL_MS)
+        show_speed()
+
     btn_a = DebouncedPin(BTN_RESET)
     btn_b = DebouncedPin(BTN_TURBO)
     btn_c = DebouncedPin(BTN_LOCK)
     b_pend = False      # B is down, turbo toggles when it comes back up
-    sim_armed = False   # this B press can still become a drive burst
+    mute_armed = False  # this B press can still become a mute toggle
     combo_since = None  # when both buttons became held
     egg_armed = False
     hdd_lit = False
@@ -493,7 +538,7 @@ def run():
         # --- A+B held -> setup mode ---------------------------------
         if btn_a.down and btn_b.down:
             b_pend = False
-            sim_armed = False
+            mute_armed = False
             egg_armed = False
             if combo_since is None:
                 combo_since = now
@@ -514,29 +559,29 @@ def run():
         if (egg_armed and btn_a.down and not btn_b.down
                 and btn_a.held_ms() >= config.EGG_HOLD_MS):
             egg_armed = False
-            easter_egg(disp)
+            easter_egg(disp, clicker)
+            disp.led(config.HDD_LED, hdd_lit)  # the burst borrowed the LED
             show_speed()
 
-        # --- button B: turbo toggle, or a faked drive burst on a hold -
+        # --- button B: turbo on release, clicker mute on a long hold --
         # The toggle waits for the release rather than firing partway
         # through the press, so a long hold can claim the press for the
-        # burst instead of flipping the speed on its way there.
+        # mute instead of flipping the speed on its way there.
         if edge_b and btn_b.down and not btn_a.down:
             b_pend = True
-            sim_armed = True
+            mute_armed = True
         if b_pend:
             if btn_a.down:
                 b_pend = False      # combo forming, swallow the toggle
-                sim_armed = False
+                mute_armed = False
             elif not btn_b.down:
                 b_pend = False
                 toggle_turbo()
-        if (sim_armed and btn_b.down and not btn_a.down
-                and btn_b.held_ms() >= config.HDD_SIM_HOLD_MS):
-            sim_armed = False
+        if (mute_armed and btn_b.down and not btn_a.down
+                and btn_b.held_ms() >= config.CLICK_MUTE_HOLD_MS):
+            mute_armed = False
             b_pend = False          # a long hold is not a turbo tap
-            hdd_burst(disp, clicker)
-            disp.led(config.HDD_LED, hdd_lit)  # hand the LED back
+            toggle_clicker()
 
         # --- J1: keyboard lock follows the maintained switch --------
         # Debounced rather than mirrored by IRQ, so the contact's
@@ -567,11 +612,13 @@ def run():
                 disp.led(config.HDD_LED, False)
                 arm_hdd_lines()  # dark again — listen for the next burst
 
-        # Click for as long as the LED is lit; the clicker rate-limits
-        # itself, so one short access ticks once and a long transfer
-        # chatters.
+        # Seek for as long as the LED is lit; the clicker rate-limits
+        # itself, so one short access clicks once and a long transfer
+        # chatters. service() lands the second edge of each seek, so it
+        # runs every pass, lit or not.
         if hdd_lit:
             clicker.tick(now)
+        clicker.service(now)
 
         time.sleep_ms(10)
 

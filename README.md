@@ -22,8 +22,8 @@ through an HT16K33A over I2C.
   follows it, and **GP20** (5 V on J3 pin 3) drives the motherboard:
   high = turbo on. Speed changes play a segment spin animation
   (`SPIN_ANIMATION`, `SPIN_MS`, `SPIN_FRAME_MS`). The toggle waits for
-  the release so a long hold can claim the press for the burst below
-  without flipping the speed on its way there.
+  the release so a long hold can claim the press for the clicker mute
+  below without flipping the speed on its way there.
 - **Reset**: button A (SW1) is mirrored to **GP21** (J3 pin 1) by pin
   interrupt: idles low, driven high while pressed
   (`RESET_ACTIVE_HIGH = True`).
@@ -41,20 +41,22 @@ through an HT16K33A over I2C.
   edges make the TXB oscillate, which would storm an IRQ — its latch
   holds each pulse until polled instead). Pulses are stretched to
   `HDD_MIN_ON_MS` so short bursts stay visible.
-- **HDD clicker**: a passive piezo on **GP22** (`CLICK_PIN`) ticks while
-  that LED is lit, so the silent CF card still sounds like a drive
-  seeking. Each tick is a short PWM burst (`CLICK_MS`, `CLICK_DUTY`)
-  cycling through `CLICK_FREQS` so it chatters rather than beeping on
-  one note, spaced no closer than `CLICK_GAP_MS` — one brief access
-  clicks once, a long transfer rattles. `CLICK_ENABLED = False` makes
-  the whole thing inert.
-- **Simulated activity**: hold button B alone for `HDD_SIM_HOLD_MS`
-  (3 s) and the panel fakes a spell of drive activity —
-  `HDD_SIM_PULSES` flashes of the HDD LED, each with its own tick,
-  spaced by the cycled `HDD_SIM_ON_MS`/`HDD_SIM_OFF_MS` lists so it
-  reads as a drive working rather than a blinking light. Useful for
-  checking the piezo and LED without waiting for the disk. Turbo is
-  left alone, and the burst is blocking, like the easter egg.
+- **HDD clicker**: a passive piezo on **GP22** (`CLICK_PIN`) clicks
+  while that LED is lit, so the silent CF card still sounds like a
+  drive seeking. There is no tone — a piezo disc clicks on a voltage
+  *edge*, and a plain DC step is what the hardware HDD clickers feed
+  theirs; a tone, however short, is a beep. A seek is two edges, one as
+  the head "moves" and another `CLICK_HOLD_MS` later as it "lands" (the
+  table is cycled so seeks are not all alike), spaced no closer than
+  `CLICK_GAP_MS` — one brief access clicks once, a long transfer
+  chatters. Nothing blocks. Louder: set `CLICK_PIN_B` and wire the
+  piezo between the two pins; they are driven in antiphase, so every
+  edge swings 6.6 V instead of 3.3 V. `CLICK_ENABLED = False` removes
+  it entirely.
+- **Clicker mute**: hold button B alone for `CLICK_MUTE_HOLD_MS` (3 s)
+  to mute or unmute the clicker; the display scrolls `HDC On` /
+  `HDC OFF` (`CLICK_TEXT_ON`/`_OFF`) and the choice is saved in
+  `settings.json` with the turbo state. Turbo is left alone.
 - **Lock**: J1 (button C) is a maintained keyboard-lock switch and
   **GP19** (5 V on J3 pin 5) follows its position, high = locked
   (`LOCK_ACTIVE_HIGH`; `LOCK_SWITCH_ACTIVE_LOW` sets which way the
@@ -62,7 +64,13 @@ through an HT16K33A over I2C.
   every boot. There is no spare LED, so the display is the indicator:
   it reads `LOC` (`LOCK_TEXT`) in place of the speed for as long as the
   switch is locked. Setup mode still shows the MHz being edited.
-- Easter egg: hold reset for `EGG_HOLD_MS` (default 1 s).
+- **Easter egg**: hold reset (button A) for `EGG_HOLD_MS` (1 s). The
+  drive "loads" the message: first a burst of faked activity —
+  `HDD_BURST_PULSES` flashes of the HDD LED with a seek per flash, in
+  the cycled uneven `HDD_BURST_ON_MS`/`_OFF_MS` times so it reads as a
+  drive working rather than a blinking light — then `EGG_TEXT` scrolls
+  past. The burst doubles as a check of the piezo and LED without
+  waiting for the disk. Turbo is left alone.
 
 LED roles default to power = LED2, turbo = LED3, HDD = LED4; remap them
 in `config.py`. The code names the positions `RED`/`YELLOW`/`GREEN`
@@ -84,7 +92,7 @@ line's flag if its LED works inverted.
 | LED4 (`GREEN` in code) | ROW10, cathode on COM3 |
 | Button A / B / C | SW1 / SW2 / J1 on GP8 / GP7 / GP6, active low, 10k pull-ups |
 | GP18–21 | level-shifted to 5 V on J3 (odd pins signals, even pins GND): GP21 = reset out (J3-1), GP20 = turbo out (J3-3), GP19 = lock out (J3-5), GP18 = HDD in (J3-7) |
-| GP22 | HDD clicker: passive piezo to GND, driven by PWM (not on J3 — taken off the Pico header) |
+| GP22 | HDD clicker: passive piezo to GND, driven by DC edges (not on J3 — taken off the Pico header). Optionally piezo between GP22 and `CLICK_PIN_B` for twice the swing |
 
 ## Files
 
