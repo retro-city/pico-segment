@@ -22,7 +22,9 @@ env:
   # MicroPython the images are built from. Keep in step with the version
   # named in firmware/ and the README.
   MPY_REF: v1.28.0
-  BOARDS: RPI_PICO_W RPI_PICO
+  # The panel's own boards (firmware/boards/): stock Pico W / Pico plus
+  # the USB drive. Add RPI_PICO_W / RPI_PICO here for plain images too.
+  BOARDS: PICO_W PICO
 
 jobs:
   firmware:
@@ -58,8 +60,14 @@ jobs:
           tag="${{ github.event.release.tag_name || github.ref_name }}"
           for board in $BOARDS; do
               # Submodules differ per board (the W pulls in cyw43/lwip/
-              # mbedtls/btstack), so fetch them for each.
-              make -C micropython/ports/rp2 BOARD="$board" submodules
+              # mbedtls/btstack), so fetch them for each. The panel's own
+              # boards live in the repo, so point the tree at them.
+              bdir="pico-segment/firmware/boards/$board"
+              if [ -d "$bdir" ]; then
+                  make -C micropython/ports/rp2 BOARD_DIR="$GITHUB_WORKSPACE/$bdir" submodules
+              else
+                  make -C micropython/ports/rp2 BOARD="$board" submodules
+              fi
               BOARD="$board" \
               MPY_DIR="$GITHUB_WORKSPACE/micropython" \
               MPY_VERSION="$MPY_REF" \

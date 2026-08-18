@@ -34,10 +34,13 @@ else:
     include("$(PORT_DIR)/boards/manifest.py")
 
 freeze("..", (
+    "boot.py",
+    "seed.py",
     "main.py",
     "config.py",
     "ht16k33_seg.py",
     "bootsound.py",
+    "defaultsound.py",
     "hddprobe.py",
     "segtest.py",
 ))

@@ -3,8 +3,14 @@
 # Copyright (C) 2026 Vidar Waagbø
 #
 # Build a MicroPython image with the front panel frozen in, and drop the
-# result in out/. Flash it by holding BOOTSEL while plugging the Pico W
-# in, then copying the .uf2 onto the RPI-RP2 drive.
+# result in out/. Flash it by holding BOOTSEL while plugging the Pico in,
+# then copying the .uf2 onto the RPI-RP2 drive.
+#
+# BOARD picks the target. PICO_W (default) and PICO are the panel's own
+# board definitions in firmware/boards/ -- stock Pico W / Pico plus the
+# USB drive that shows settings.json and boot.wav to any computer. The
+# stock names (RPI_PICO_W, RPI_PICO) still build plain images without
+# the drive, from the MicroPython tree's own board dirs.
 #
 # Needs a MicroPython source tree with the rp2 submodules fetched and
 # mpy-cross built; point MPY_DIR at it (default ../micropython):
@@ -17,8 +23,15 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MPY_DIR="${MPY_DIR:-$(dirname "$REPO")/micropython}"
-BOARD="${BOARD:-RPI_PICO_W}"
+BOARD="${BOARD:-PICO_W}"
 OUT="$REPO/out"
+
+# The panel's own boards live in the repo; anything else is looked up in
+# the MicroPython tree as usual (BOARD_DIR unset).
+BOARD_ARGS=(BOARD="$BOARD")
+if [ -d "$REPO/firmware/boards/$BOARD" ]; then
+    BOARD_ARGS=(BOARD_DIR="$REPO/firmware/boards/$BOARD")
+fi
 
 if [ ! -d "$MPY_DIR/ports/rp2" ]; then
     echo "no MicroPython tree at $MPY_DIR (set MPY_DIR)" >&2
@@ -38,7 +51,7 @@ if [ -f "$CACHE" ] &&
 fi
 
 make -C "$MPY_DIR/ports/rp2" \
-    BOARD="$BOARD" \
+    "${BOARD_ARGS[@]}" \
     FROZEN_MANIFEST="$MANIFEST" \
     -j"$(nproc)"
 

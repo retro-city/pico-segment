@@ -35,7 +35,7 @@ Behavior:
 
 import json
 import time
-from machine import Pin
+from machine import Pin, mem32
 
 import bootsound
 import config
@@ -77,40 +77,119 @@ def show_mhz(disp, mhz):
         disp.show('%d.%02d' % (mhz // 1000, (mhz % 1000) // 10))
 
 
+# --- USB drive ----------------------------------------------------------
+# The USB-drive images expose the filesystem to the PC as mass storage,
+# raw flash sectors with no locking, so two parties keep their own idea
+# of the FAT. Rule: while a host is attached the PC owns the drive; the
+# panel keeps its changes in RAM and settles up when the host goes.
+
+_SIE_STATUS = 0x50110050   # RP2040 USB controller status register
+
+
+def usb_host_present():
+    """True while a USB host has the panel enumerated and awake.
+
+    Read off the USB controller rather than VBUS: on this board VBUS is
+    also the power input, so it is high whenever the panel is on. With
+    no host the bus idles and the SUSPENDED bit sets within 3 ms; a
+    host that keeps us enumerated sends a frame every millisecond.
+    """
+    v = mem32[_SIE_STATUS]
+    return bool(v & (1 << 16)) and not (v & (1 << 4))   # CONNECTED, !SUSPENDED
+
+
+def _refresh_fs():
+    """Drop FatFs' cached view of the flash after the host has had it.
+
+    Only on a FAT filesystem (the USB-drive images); a LittleFS build
+    has no host to share with and is left alone.
+    """
+    try:
+        import vfs
+        import rp2
+        fs = vfs.VfsFat(rp2.Flash())   # raises if the flash is not FAT
+    except Exception:
+        return
+    vfs.umount('/')
+    vfs.mount(fs, '/')
+
+
 class Settings:
-    """Persistent state: turbo flag and both MHz values."""
+    """Persistent state: turbo flag, both MHz values, clicker mute.
+
+    Reads and writes settings.json, deferring writes while a USB host
+    owns the drive: save() then just marks the state dirty, and sync()
+    -- called when the host goes away -- either adopts a file the host
+    edited or writes the deferred state out. The file wins a conflict;
+    someone went to the trouble of editing it.
+    """
 
     PATH = 'settings.json'
 
     def __init__(self):
+        self.dirty = False
+        self._raw = None      # file content as last read/written
+        self._defaults()
+        self._load()
+
+    def _defaults(self):
         self.turbo = config.TURBO_ON_AT_BOOT
         self.mhz_turbo = config.MHZ_TURBO
         self.mhz_normal = config.MHZ_NORMAL
         self.clicker = True  # sound on; CLICK_ENABLED decides if it exists
+
+    def _load(self):
         try:
-            with open(self.PATH) as f:
-                d = json.load(f)
+            with open(self.PATH, 'rb') as f:
+                raw = f.read()
+            d = json.loads(raw)
             self.turbo = bool(d.get('turbo', self.turbo))
             self.mhz_turbo = self._clamp(d.get('mhz_turbo', self.mhz_turbo))
             n = d.get('mhz_normal', self.mhz_normal)
             self.mhz_normal = None if n is None else self._clamp(n)
             self.clicker = bool(d.get('clicker', self.clicker))
-        except (OSError, ValueError):
-            pass  # missing or corrupt file -> config.py defaults
+            self._raw = raw
+        except (OSError, ValueError, TypeError):
+            pass  # missing or corrupt file -> what we had (defaults at boot)
 
     @staticmethod
     def _clamp(mhz):
         return min(MHZ_MAX, max(1, int(mhz)))
 
     def save(self):
+        """Write now, or defer if the PC owns the drive. True if written."""
+        if usb_host_present():
+            self.dirty = True
+            return False
+        raw = json.dumps({'turbo': self.turbo,
+                          'mhz_turbo': self.mhz_turbo,
+                          'mhz_normal': self.mhz_normal,
+                          'clicker': self.clicker})
         try:
             with open(self.PATH, 'w') as f:
-                json.dump({'turbo': self.turbo,
-                           'mhz_turbo': self.mhz_turbo,
-                           'mhz_normal': self.mhz_normal,
-                           'clicker': self.clicker}, f)
+                f.write(raw)
         except OSError:
-            pass  # keep running even if the flash write fails
+            return False  # keep running even if the flash write fails
+        self._raw = raw.encode()
+        self.dirty = False
+        return True
+
+    def sync(self):
+        """The host has gone: settle up. True if the file changed us."""
+        _refresh_fs()
+        try:
+            with open(self.PATH, 'rb') as f:
+                raw = f.read()
+        except OSError:
+            raw = None
+        if raw is not None and raw != self._raw:
+            self._defaults()   # a pared-down file means "back to defaults"
+            self._load()
+            self.dirty = False
+            return True
+        if self.dirty:
+            self.save()
+        return False
 
 
 class DebouncedPin:
@@ -455,8 +534,10 @@ def setup_mode(disp, settings, btn_a, btn_b):
         settings.mhz_turbo = val
     else:
         settings.mhz_normal = val
-    settings.save()
     disp.blink(0)
+    if not settings.save():
+        disp.show(config.USB_TEXT)   # PC owns the drive: kept in RAM only
+        time.sleep_ms(config.USB_FLASH_MS)
 
     while btn_a.down or btn_b.down:  # wait for release before resuming
         btn_a.update()
@@ -470,7 +551,7 @@ def setup_mode(disp, settings, btn_a, btn_b):
 def run():
     global hdd_pulse
 
-    settings = Settings()
+    settings = Settings()   # boot.py has already seeded settings.json
     disp = SegmentDisplay(brightness=config.BRIGHTNESS)
     TURBO_OUT.value(settings.turbo)  # tell the motherboard first
     set_lock_out(lock_engaged(BTN_LOCK.value() == 0))
@@ -489,9 +570,16 @@ def run():
         else:
             show_mhz(disp, settings.mhz_normal)
 
+    def save_settings():
+        # A deferred save (PC owns the drive) is worth telling the user
+        # about, since the change will not survive a power cycle.
+        if not settings.save():
+            disp.show(config.USB_TEXT)
+            time.sleep_ms(config.USB_FLASH_MS)
+
     def toggle_turbo():
         settings.turbo = not settings.turbo
-        settings.save()
+        save_settings()
         TURBO_OUT.value(settings.turbo)
         disp.led(config.TURBO_LED, settings.turbo)
         if config.SPIN_ANIMATION and settings.mhz_normal is not None:
@@ -525,15 +613,23 @@ def run():
 
     def toggle_clicker():
         settings.clicker = not settings.clicker
-        settings.save()
+        save_settings()
         clicker.muted = not settings.clicker
         disp.scroll(config.CLICK_TEXT_ON if settings.clicker
                     else config.CLICK_TEXT_OFF, config.CLICK_TEXT_SCROLL_MS)
         show_speed()
 
+    def apply_settings():
+        # The host edited settings.json: make the panel match it.
+        TURBO_OUT.value(settings.turbo)
+        disp.led(config.TURBO_LED, settings.turbo)
+        clicker.muted = not settings.clicker
+        show_speed()
+
     btn_a = DebouncedPin(BTN_RESET)
     btn_b = DebouncedPin(BTN_TURBO)
     btn_c = DebouncedPin(BTN_LOCK)
+    host_was = usb_host_present()
     b_pend = False      # B is down, turbo toggles when it comes back up
     mute_armed = False  # this B press can still become a mute toggle
     combo_since = None  # when both buttons became held
@@ -545,6 +641,15 @@ def run():
         now = time.ticks_ms()
         edge_a = btn_a.update()
         edge_b = btn_b.update()
+
+        # --- USB drive: the PC has just let go ----------------------
+        # Re-read the filesystem the host may have written to, adopt an
+        # edited settings.json, or flush changes made while it was here.
+        host = usb_host_present()
+        if host_was and not host:
+            if settings.sync():
+                apply_settings()
+        host_was = host
 
         # --- A+B held -> setup mode ---------------------------------
         if btn_a.down and btn_b.down:

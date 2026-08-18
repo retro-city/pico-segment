@@ -114,11 +114,15 @@ line's flag if its LED works inverted.
 - `main.py` — the front panel controller described above
 - `segtest.py` — board check: lights each segment/LED one at a time
 - `bootsound.py` — WAV player for the piezo (PIO PWM + DMA)
-- `sounds/spinup.wav` — example boot sound; `tools/mkspinup.py` made it
+- `sounds/spinup.wav` — the default boot sound; `tools/mkspinup.py` made it
+- `defaultsound.py` — the same WAV as a frozen module, seeded onto a fresh
+  drive as `boot.wav` (`tools/mkdefaultsound.py` regenerates it)
 - `tools/wav2boot.py` — converts any WAV to the panel's 8-bit mono format
 - `firmware/RPI_PICO_W-v1.28.0.uf2` — stock MicroPython for the Pico W
 - `firmware/manifest.py`, `firmware/build.sh` — build a UF2 with the
   panel frozen in (see [All-in-one UF2](#all-in-one-uf2))
+- `firmware/boards/PICO`, `PICO_W` — the panel's own board definitions:
+  stock Pico / Pico W plus the [USB drive](#the-usb-drive)
 - `firmware/verify_uf2.py` — checks a built image is a sane RP2040 UF2
   and really carries the frozen code
 - `tools/mpr` — vendored `mpremote` wrapper (this machine has no pip; only
@@ -154,9 +158,14 @@ git clone --depth 1 --branch v1.28.0 \
     https://github.com/micropython/micropython.git ../micropython
 make -C ../micropython/mpy-cross
 make -C ../micropython/ports/rp2 BOARD=RPI_PICO_W submodules
-firmware/build.sh                  # -> out/pico-segment-RPI_PICO_W-*.uf2
-BOARD=RPI_PICO firmware/build.sh   # -> out/pico-segment-RPI_PICO-*.uf2
+firmware/build.sh                  # -> out/pico-segment-PICO_W-*.uf2
+BOARD=PICO firmware/build.sh       # -> out/pico-segment-PICO-*.uf2
 ```
+
+`PICO_W` and `PICO` are the panel's own boards in `firmware/boards/`:
+the stock Pico W / Pico definitions plus the USB drive below. The stock
+names (`BOARD=RPI_PICO_W`, `RPI_PICO`) still build plain images without
+the drive.
 
 Needs `arm-none-eabi-gcc`, `cmake`, `make` and `git`; `MPY_DIR` overrides
 where the MicroPython tree lives and `MPY_VERSION` overrides the version
@@ -182,6 +191,47 @@ holds the writable `settings.json`. `sys.path` is `['', '.frozen']`, so a
 roles and polarities can still be changed without rebuilding. `main.py`
 is the exception: the boot code looks for a frozen `main.py` *before* the
 filesystem one, so changing it means a rebuild.
+
+## The USB drive
+
+With a `PICO`/`PICO_W` image the panel shows up on any computer as a
+removable drive named **PICOSEGMENT** (plus the usual serial port).
+Since the code is frozen, the drive holds just two things, and the
+panel puts them there itself:
+
+- `settings.json` — turbo state, both MHz values, clicker mute. Edit it
+  and unplug; the panel adopts it the moment the cable comes out.
+  Recreated with defaults whenever it is missing (delete it to reset).
+- `boot.wav` — the boot sound. Replace it with your own, or delete it
+  for silence. A freshly formatted drive gets the built-in default
+  (`sounds/spinup.wav`, frozen in as `defaultsound.py`); it only comes
+  back if `settings.json` is deleted as well, i.e. a full reset.
+
+The drive is the raw filesystem, shared between the PC's driver and the
+panel's own FAT code with no locking, so **while a computer is attached
+the computer owns the drive**. The panel keeps setting changes made in
+that time in RAM (turbo still switches, setup still works) and flashes
+`USb` on the display where it would have saved; when the host goes it
+writes them out — unless the host edited `settings.json` in the
+meantime, in which case the file wins. Two consequences worth knowing:
+
+- Powered **only by USB** there is no "cable out" moment before the
+  power goes, so on the bench, changes made with the buttons are not
+  saved. Edit `settings.json` on the drive instead, or power the panel
+  from the PSU as installed and use USB just for the drive.
+- `tools/mpr cp` writes from the panel's side; if the drive is mounted
+  on the PC at the time, the PC's view goes stale until it remounts.
+  Eject the drive first, or just use the drive.
+
+The first boot after flashing over a plain image reformats the flash to
+FAT (the drive needs FAT); `settings.json` and `boot.wav` from before
+are lost, so copy them back. The `RPI_PICO*` images keep LittleFS and
+have no drive.
+
+Windows note: MicroPython's stock USB VID/PID is kept, and Windows
+caches a device's descriptors per VID/PID — if a plain-image Pico was
+plugged in before, the drive may not appear until that cached entry is
+removed in Device Manager.
 
 ## Using the driver interactively
 

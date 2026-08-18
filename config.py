@@ -117,6 +117,16 @@ CLICK_TEXT_ON = 'HDCLIC ON'
 CLICK_TEXT_OFF = 'HDCLIC OFF'
 CLICK_TEXT_SCROLL_MS = 200
 
+# USB drive (the PICO / PICO_W images): the Pico's filesystem shows up on
+# any computer as a drive called PICOSEGMENT holding settings.json and
+# boot.wav. While a computer is attached it owns the drive -- the panel
+# keeps setting changes in RAM and flashes this text instead of saving,
+# then writes them out (or adopts an edited settings.json) when the
+# cable comes out. Powered only by USB there is no "cable out" moment
+# before power is lost, so on the bench edit settings.json on the drive.
+USB_TEXT = 'USb'
+USB_FLASH_MS = 700
+
 # Boot sound: a WAV on the Pico's filesystem, played through the piezo
 # during the power-on lamp test. Copy it over with
 #   tools/mpr cp boot.wav :
@@ -127,6 +137,12 @@ CLICK_TEXT_SCROLL_MS = 200
 # clicker pins (CLICK_ENABLED), since that is the speaker.
 BOOT_SOUND = 'boot.wav'
 BOOT_SOUND_MAX_KB = 96      # ~6 s at 16 kHz 8-bit
+# On a freshly formatted filesystem (nothing on the drive at all) write
+# the built-in default -- sounds/spinup.wav, frozen in as
+# defaultsound.py -- so there is something to hear and to replace.
+# Delete boot.wav afterwards to silence it; it only comes back if
+# settings.json is deleted too (a full reset).
+BOOT_SOUND_SEED_DEFAULT = True
 
 # The drive burst played by the easter egg (hold reset): the HDD LED
 # flashes with a seek per flash, in these cycled uneven on/off times, so
