@@ -126,6 +126,8 @@ line's flag if its LED works inverted.
 - `segtest.py` — board check: lights each segment/LED one at a time
 - `bootsound.py` — WAV player for the piezo (PIO PWM + DMA)
 - `sounds/spinup.wav` — the default boot sound; `tools/mkspinup.py` made it
+- `sounds/DING.WAV`, `sounds/ding.wav` — the Windows 95 ding, as found and
+  normalized to full scale (`wav2boot.py --normalize`)
 - `defaultsound.py` — the same WAV as a frozen module, seeded onto a fresh
   drive as `boot.wav` (`tools/mkdefaultsound.py` regenerates it)
 - `tools/wav2boot.py` — converts any WAV to the panel's 8-bit mono format
