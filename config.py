@@ -128,15 +128,16 @@ USB_TEXT = 'USb'
 USB_FLASH_MS = 700
 
 # Boot sound: a WAV on the Pico's filesystem, played through the piezo
-# during the power-on lamp test. Copy it over with
-#   tools/mpr cp boot.wav :
-# (or onto the USB drive). Mono PCM, 8-bit unsigned is the fast path --
-# tools/wav2boot.py makes one from any WAV. 16 kHz suits a piezo: it
-# cannot do much below ~1 kHz, so bass is wasted bytes. RAM caps the
-# length; longer files play truncated. None disables it. Needs the
-# clicker pins (CLICK_ENABLED), since that is the speaker.
+# from power-on, streaming from flash -- it can be a whole track, as
+# long as the drive has room (16 kHz 8-bit is 16 KB/s; ~80 s fits a
+# plain Pico's 1.4 MB, ~50 s a Pico W's). Copy it onto the USB drive
+# (or tools/mpr cp boot.wav :). Mono PCM, 8-bit unsigned is the fast
+# path -- tools/wav2boot.py makes one from any WAV. 16 kHz suits a
+# piezo: it cannot do much below ~1 kHz, so bass is wasted bytes. The
+# panel runs as normal while it plays; the clicker waits for the pins,
+# and pressing reset cuts it. None disables it. Needs the clicker pins
+# (CLICK_ENABLED), since that is the speaker.
 BOOT_SOUND = 'boot.wav'
-BOOT_SOUND_MAX_KB = 96      # ~6 s at 16 kHz 8-bit
 # On a freshly formatted filesystem (nothing on the drive at all) write
 # the built-in default -- sounds/spinup.wav, frozen in as
 # defaultsound.py -- so there is something to hear and to replace.

@@ -247,7 +247,7 @@ class Clicker:
     piezo fitted, the class is inert.
     """
 
-    def __init__(self, settings):
+    def __init__(self, settings, claim=True):
         self.s = settings                # click_hold_ms, click_gap_ms, clicker
         self.pin_a = None
         self.pin_b = None
@@ -255,7 +255,12 @@ class Clicker:
         self.release_at = None           # when the pending second edge lands
         self._pol = 0
         self._i = 0
-        if config.CLICK_ENABLED:
+        if claim:
+            self.claim_pins()
+
+    def claim_pins(self):
+        """Take the piezo pins. Held off while a boot sound owns them."""
+        if config.CLICK_ENABLED and self.pin_a is None:
             self.pin_a = Pin(config.CLICK_PIN, Pin.OUT, value=0)
             bootsound.stiff_pad(config.CLICK_PIN)
             if config.CLICK_PIN_B is not None:
@@ -482,8 +487,7 @@ def run():
     # runs on PIO/DMA, so the lamp test does not wait for it.
     snd = None
     if settings.boot_sound and config.CLICK_ENABLED:
-        snd = bootsound.play(settings.boot_sound, config.BOOT_SOUND_MAX_KB * 1024,
-                             config.CLICK_PIN, config.CLICK_PIN_B)
+        snd = bootsound.play(settings.boot_sound, config.CLICK_PIN, config.CLICK_PIN_B)
     show_speed()
     disp.leds(True, True, True)
     time.sleep(2)
@@ -497,10 +501,17 @@ def run():
     kick_hdd_line()
     arm_hdd_lines()
 
-    if snd is not None:
-        snd.wait()   # a sound longer than the lamp test finishes here
-        snd.stop()   # ...and hands the piezo pins to the clicker
-    clicker = Clicker(settings)
+    # The sound streams on in the background for as long as it lasts
+    # (a whole track, if that is what boot.wav is); the clicker gets
+    # the pins when it ends, or when reset is pressed.
+    clicker = Clicker(settings, claim=snd is None)
+
+    def end_sound():
+        nonlocal snd
+        if snd is not None:
+            snd.stop()
+            snd = None
+            clicker.claim_pins()
 
     def toggle_clicker():
         settings.clicker = not settings.clicker   # the clicker reads it live
@@ -533,6 +544,10 @@ def run():
         edge_a = btn_a.update()
         edge_b = btn_b.update()
 
+        # --- boot sound: hand the piezo over when it ends -------------
+        if snd is not None and not snd.playing():
+            end_sound()
+
         # --- USB drive: the PC has just let go ----------------------
         # Re-read the filesystem the host may have written to, adopt an
         # edited settings.json, or flush changes made while it was here.
@@ -560,6 +575,7 @@ def run():
         # --- button A: reset flash + easter egg ---------------------
         if edge_a and btn_a.down:
             egg_armed = True
+            end_sound()      # reset cuts a still-playing boot sound
             disp.show('---')
             time.sleep_ms(config.RESET_FLASH_MS)
             show_speed()

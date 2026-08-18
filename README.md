@@ -19,18 +19,21 @@ through an HT16K33A over I2C.
 - At power-on all three LEDs light for 2 seconds (lamp test), then only the
   **power** LED stays lit. Turbo starts on (`TURBO_ON_AT_BOOT`).
 - **Boot sound**: if a `boot.wav` is on the Pico's filesystem it plays
-  through the piezo over the lamp test (`BOOT_SOUND`,
-  `BOOT_SOUND_MAX_KB`). Mono PCM, 8 or 16-bit, 2–48 kHz; 8-bit is the
-  fast path and `tools/wav2boot.py` makes one from any WAV. 16 kHz
-  suits a piezo — it barely moves below ~1 kHz, so bass is wasted
-  bytes — and RAM caps the length at 96 000 samples (6 s at 16 kHz,
-  4.4 s at 22.05 kHz); longer files play truncated. Playback is PIO +
-  DMA on the clicker pins (one machine per pin, one inverted, so the
-  disc sees the full 6.6 V swing; ~62 kHz carrier, chosen so the disc
-  can actually charge to the rails each cycle) and costs the CPU
-  nothing, so the lamp test does not wait for it. Many stock sounds sit
-  well below full scale (Windows 95's ding peaks at 46 %); pass
-  `--normalize` to `wav2boot.py` for the missing 6 dB. A bad file is
+  through the piezo from power-on (`boot_sound` in `settings.json`).
+  It **streams from flash**, so it can be a whole track: 16 kHz 8-bit
+  is 16 KB/s, and about 80 s fits a plain Pico's 1.4 MB drive (50 s on
+  a Pico W). Mono PCM, 8 or 16-bit, 2–48 kHz; 8-bit is the fast path
+  and `tools/wav2boot.py` makes one from any WAV. 16 kHz suits a piezo
+  — it barely moves below ~1 kHz, so bass is wasted bytes. Playback is
+  PIO + DMA on the clicker pins (one machine per pin, one inverted, so
+  the disc sees the full 6.6 V swing; ~62 kHz carrier, chosen so the
+  disc can actually charge to the rails each cycle), double-buffered
+  with refills from the DMA interrupt, so it costs the CPU next to
+  nothing and the panel runs as normal while it plays — the clicker
+  just waits for its pins until the sound ends, and pressing reset cuts
+  it. Many stock sounds sit well below full scale (Windows 95's ding
+  peaks at 46 %); pass `--normalize` to `wav2boot.py` for the missing
+  6 dB. A bad file is
   reported on the serial console and skipped; the panel never fails to
   boot over a sound. `sounds/spinup.wav` is a synthesized drive
   spin-up to start from (`tools/mkspinup.py` regenerates it).
