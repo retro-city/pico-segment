@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .claude/
 out/
+settings.json

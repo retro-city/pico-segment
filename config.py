@@ -101,5 +101,16 @@ CLICK_MS = 5          # length of one tick
 CLICK_DUTY = 32768    # 16-bit duty; half is the loudest square wave
 CLICK_GAP_MS = 60     # shortest spacing between ticks
 
+# Simulated drive activity: hold button B alone this long and the HDD
+# LED flashes with matching ticks, so the clicker can be demoed and the
+# wiring checked without waiting for the disk to do something. The
+# uneven on/off lists are cycled, which reads as a drive working rather
+# than a blinking light. Holding B this long does NOT toggle turbo --
+# the toggle waits for the release, so a long hold claims the press.
+HDD_SIM_HOLD_MS = 3000
+HDD_SIM_PULSES = 14
+HDD_SIM_ON_MS = (20, 45, 30, 60)
+HDD_SIM_OFF_MS = (35, 20, 70, 25)
+
 # Display brightness, 0..15.
 BRIGHTNESS = 15

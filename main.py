@@ -8,9 +8,11 @@ Behavior:
     settings.json; config.py supplies first-boot defaults.
   - All three LEDs light for 2 s at power-on, then only the power LED
     stays lit.
-  - Button B (SW2, GP7) toggles turbo: turbo LED follows, GP20 (5 V on
-    J3 pin 3) drives the motherboard (high = turbo on), state is saved,
-    and the speed change plays a spin animation.
+  - Button B (SW2, GP7) toggles turbo when released: turbo LED follows,
+    GP20 (5 V on J3 pin 3) drives the motherboard (high = turbo on),
+    state is saved, and the speed change plays a spin animation. Hold B
+    alone for HDD_SIM_HOLD_MS instead and it fakes a spell of drive
+    activity — LED flashes with matching ticks, no turbo toggle.
   - Button A (SW1, GP8) is the reset button, mirrored to GP21 (5 V on
     J3 pin 1) with config polarity; the display flashes ---.
     Hold A alone for a second for a surprise.
@@ -44,7 +46,6 @@ TURBO_OUT = Pin(config.TURBO_OUT_PIN, Pin.OUT)
 RESET_OUT = Pin(config.RESET_OUT_PIN, Pin.OUT)
 LOCK_OUT = Pin(config.LOCK_OUT_PIN, Pin.OUT)
 
-COMBO_GRACE_MS = 200   # window for the second button of the A+B combo
 STEP_GRACE_MS = 150    # setup: tell a +-1 step apart from an A+B save
 STEP_HOLD_MS = 450     # setup: hold this long before auto-repeat
 STEP_REPEAT_MS = 80    # setup: auto-repeat interval for +-1 steps
@@ -275,9 +276,15 @@ class Clicker:
             self.pwm = PWM(Pin(config.CLICK_PIN))
             self.pwm.duty_u16(0)  # silent until something seeks
 
-    def tick(self, now):
-        """Click once, unless the previous tick was too recent."""
-        if self.pwm is None or time.ticks_diff(now, self.next_at) < 0:
+    def tick(self, now, force=False):
+        """Click once, unless the previous tick was too recent.
+
+        `force` skips the rate limit, for callers that already decide
+        their own spacing (the simulated burst).
+        """
+        if self.pwm is None:
+            return
+        if not force and time.ticks_diff(now, self.next_at) < 0:
             return
         # Rotate the pitch so sustained activity chatters like a head
         # stepping around rather than beeping on one note.
@@ -291,6 +298,23 @@ class Clicker:
     def silence(self):
         if self.pwm is not None:
             self.pwm.duty_u16(0)
+
+
+def hdd_burst(disp, clicker):
+    """Fake a spell of drive activity, for demoing without a disk.
+
+    Flashes the HDD LED and ticks along with it, in uneven bursts so it
+    reads as a drive working rather than a blinking light. Blocking,
+    like the easter egg; the caller owns the LED afterwards.
+    """
+    on = config.HDD_SIM_ON_MS
+    off = config.HDD_SIM_OFF_MS
+    for i in range(config.HDD_SIM_PULSES):
+        disp.led(config.HDD_LED, True)
+        clicker.tick(time.ticks_ms(), force=True)  # one tick per flash
+        time.sleep_ms(on[i % len(on)])
+        disp.led(config.HDD_LED, False)
+        time.sleep_ms(off[i % len(off)])
 
 
 # --- display bits -------------------------------------------------------
@@ -454,7 +478,8 @@ def run():
     btn_a = DebouncedPin(BTN_RESET)
     btn_b = DebouncedPin(BTN_TURBO)
     btn_c = DebouncedPin(BTN_LOCK)
-    b_pend = None       # B press waiting out the combo grace window
+    b_pend = False      # B is down, turbo toggles when it comes back up
+    sim_armed = False   # this B press can still become a drive burst
     combo_since = None  # when both buttons became held
     egg_armed = False
     hdd_lit = False
@@ -467,7 +492,8 @@ def run():
 
         # --- A+B held -> setup mode ---------------------------------
         if btn_a.down and btn_b.down:
-            b_pend = None
+            b_pend = False
+            sim_armed = False
             egg_armed = False
             if combo_since is None:
                 combo_since = now
@@ -491,16 +517,26 @@ def run():
             easter_egg(disp)
             show_speed()
 
-        # --- button B: turbo toggle, unless A+B is forming ----------
+        # --- button B: turbo toggle, or a faked drive burst on a hold -
+        # The toggle waits for the release rather than firing partway
+        # through the press, so a long hold can claim the press for the
+        # burst instead of flipping the speed on its way there.
         if edge_b and btn_b.down and not btn_a.down:
-            b_pend = now
-        if b_pend is not None:
+            b_pend = True
+            sim_armed = True
+        if b_pend:
             if btn_a.down:
-                b_pend = None  # combo forming, swallow the toggle
-            elif not btn_b.down or \
-                    time.ticks_diff(now, b_pend) >= COMBO_GRACE_MS:
-                b_pend = None
+                b_pend = False      # combo forming, swallow the toggle
+                sim_armed = False
+            elif not btn_b.down:
+                b_pend = False
                 toggle_turbo()
+        if (sim_armed and btn_b.down and not btn_a.down
+                and btn_b.held_ms() >= config.HDD_SIM_HOLD_MS):
+            sim_armed = False
+            b_pend = False          # a long hold is not a turbo tap
+            hdd_burst(disp, clicker)
+            disp.led(config.HDD_LED, hdd_lit)  # hand the LED back
 
         # --- J1: keyboard lock follows the maintained switch --------
         # Debounced rather than mirrored by IRQ, so the contact's

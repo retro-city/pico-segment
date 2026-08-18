@@ -18,10 +18,12 @@ through an HT16K33A over I2C.
   down from `1.00` returns to `999`.
 - At power-on all three LEDs light for 2 seconds (lamp test), then only the
   **power** LED stays lit. Turbo starts on (`TURBO_ON_AT_BOOT`).
-- **Turbo** toggles with button B (SW2). The turbo LED follows it, and
-  **GP20** (5 V on J3 pin 3) drives the motherboard: high = turbo on.
-  Speed changes play a segment spin animation (`SPIN_ANIMATION`,
-  `SPIN_MS`, `SPIN_FRAME_MS`).
+- **Turbo** toggles when button B (SW2) is *released*. The turbo LED
+  follows it, and **GP20** (5 V on J3 pin 3) drives the motherboard:
+  high = turbo on. Speed changes play a segment spin animation
+  (`SPIN_ANIMATION`, `SPIN_MS`, `SPIN_FRAME_MS`). The toggle waits for
+  the release so a long hold can claim the press for the burst below
+  without flipping the speed on its way there.
 - **Reset**: button A (SW1) is mirrored to **GP21** (J3 pin 1) by pin
   interrupt: idles low, driven high while pressed
   (`RESET_ACTIVE_HIGH = True`).
@@ -46,6 +48,13 @@ through an HT16K33A over I2C.
   one note, spaced no closer than `CLICK_GAP_MS` — one brief access
   clicks once, a long transfer rattles. `CLICK_ENABLED = False` makes
   the whole thing inert.
+- **Simulated activity**: hold button B alone for `HDD_SIM_HOLD_MS`
+  (3 s) and the panel fakes a spell of drive activity —
+  `HDD_SIM_PULSES` flashes of the HDD LED, each with its own tick,
+  spaced by the cycled `HDD_SIM_ON_MS`/`HDD_SIM_OFF_MS` lists so it
+  reads as a drive working rather than a blinking light. Useful for
+  checking the piezo and LED without waiting for the disk. Turbo is
+  left alone, and the burst is blocking, like the easter egg.
 - **Lock**: J1 (button C) is a maintained keyboard-lock switch and
   **GP19** (5 V on J3 pin 5) follows its position, high = locked
   (`LOCK_ACTIVE_HIGH`; `LOCK_SWITCH_ACTIVE_LOW` sets which way the
