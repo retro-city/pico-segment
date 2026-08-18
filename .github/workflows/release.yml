@@ -31,7 +31,7 @@ jobs:
       - name: Check out the panel
         uses: actions/checkout@v4
         with:
-          path: segment1911
+          path: pico-segment
 
       # build.sh looks for MicroPython next to the repo, which is where
       # this lands it.
@@ -63,16 +63,16 @@ jobs:
               BOARD="$board" \
               MPY_DIR="$GITHUB_WORKSPACE/micropython" \
               MPY_VERSION="$MPY_REF" \
-                  segment1911/firmware/build.sh
+                  pico-segment/firmware/build.sh
               # Name the asset after the panel release and the board; the
               # MicroPython version goes in the release notes instead.
-              cp "segment1911/out/segment1911-$board-$MPY_REF.uf2" \
-                 "dist/segment1911-$tag-$board.uf2"
+              cp "pico-segment/out/pico-segment-$board-$MPY_REF.uf2" \
+                 "dist/pico-segment-$tag-$board.uf2"
           done
           ls -l dist
 
       - name: Check the images carry the frozen code
-        run: python3 segment1911/firmware/verify_uf2.py dist/*.uf2
+        run: python3 pico-segment/firmware/verify_uf2.py dist/*.uf2
 
       - name: Upload as workflow artifacts
         uses: actions/upload-artifact@v4

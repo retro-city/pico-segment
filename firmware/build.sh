@@ -46,7 +46,7 @@ mkdir -p "$OUT"
 # MPY_VERSION names the file; derive it from the tree unless told, so a
 # CI checkout without tags still produces a predictable asset name.
 VERSION="${MPY_VERSION:-$(git -C "$MPY_DIR" describe --tags --always 2>/dev/null || echo unknown)}"
-NAME="segment1911-$BOARD-$VERSION.uf2"
+NAME="pico-segment-$BOARD-$VERSION.uf2"
 cp "$MPY_DIR/ports/rp2/build-$BOARD/firmware.uf2" "$OUT/$NAME"
 
 echo

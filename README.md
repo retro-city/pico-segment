@@ -129,8 +129,8 @@ git clone --depth 1 --branch v1.28.0 \
     https://github.com/micropython/micropython.git ../micropython
 make -C ../micropython/mpy-cross
 make -C ../micropython/ports/rp2 BOARD=RPI_PICO_W submodules
-firmware/build.sh                  # -> out/segment1911-RPI_PICO_W-*.uf2
-BOARD=RPI_PICO firmware/build.sh   # -> out/segment1911-RPI_PICO-*.uf2
+firmware/build.sh                  # -> out/pico-segment-RPI_PICO_W-*.uf2
+BOARD=RPI_PICO firmware/build.sh   # -> out/pico-segment-RPI_PICO-*.uf2
 ```
 
 Needs `arm-none-eabi-gcc`, `cmake`, `make` and `git`; `MPY_DIR` overrides
@@ -139,7 +139,7 @@ in the filename. The build takes a few minutes the first time because it
 compiles `picotool` too.
 
 Pushing a `v*` tag builds both images in CI and attaches them to the
-GitHub release as `segment1911-<tag>-<board>.uf2`
+GitHub release as `pico-segment-<tag>-<board>.uf2`
 (`.github/workflows/release.yml`).
 
 **Match the image to the board.** A Pico W image on a genuine non-W Pico
