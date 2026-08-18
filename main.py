@@ -12,7 +12,7 @@ Behavior:
     GP20 (5 V on J3 pin 3) drives the motherboard (high = turbo on),
     state is saved, and the speed change plays a spin animation. Hold B
     alone for CLICK_MUTE_HOLD_MS instead to mute/unmute the HDD
-    clicker (saved too); the display scrolls HDC On / HDC OFF.
+    clicker (saved too); the display scrolls HDCLIC ON / HDCLIC OFF.
   - Button A (SW1, GP8) is the reset button, mirrored to GP21 (5 V on
     J3 pin 1) with config polarity; the display flashes ---.
     Hold A alone for a second for a surprise: a spell of faked drive

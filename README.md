@@ -54,8 +54,8 @@ through an HT16K33A over I2C.
   edge swings 6.6 V instead of 3.3 V. `CLICK_ENABLED = False` removes
   it entirely.
 - **Clicker mute**: hold button B alone for `CLICK_MUTE_HOLD_MS` (3 s)
-  to mute or unmute the clicker; the display scrolls `HDC On` /
-  `HDC OFF` (`CLICK_TEXT_ON`/`_OFF`) and the choice is saved in
+  to mute or unmute the clicker; the display scrolls `HDCLIC ON` /
+  `HDCLIC OFF` (`CLICK_TEXT_ON`/`_OFF`) and the choice is saved in
   `settings.json` with the turbo state. Turbo is left alone.
 - **Lock**: J1 (button C) is a maintained keyboard-lock switch and
   **GP19** (5 V on J3 pin 5) follows its position, high = locked

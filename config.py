@@ -111,8 +111,8 @@ CLICK_GAP_MS = 60                       # shortest spacing between seeks
 # Hold button B alone this long to mute/unmute the clicker; the choice
 # is saved with the other settings. The display scrolls the new state.
 CLICK_MUTE_HOLD_MS = 3000
-CLICK_TEXT_ON = 'HDC On'
-CLICK_TEXT_OFF = 'HDC OFF'
+CLICK_TEXT_ON = 'HDCLIC ON'
+CLICK_TEXT_OFF = 'HDCLIC OFF'
 CLICK_TEXT_SCROLL_MS = 200
 
 # The drive burst played by the easter egg (hold reset): the HDD LED
