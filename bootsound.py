@@ -3,7 +3,7 @@
 """Play a WAV file through the piezo at power-on.
 
 The piezo hangs between two GPIOs (the HDD clicker's pins). Two PIO
-state machines run an 8-bit PWM at ~163 kHz on them, one inverted, so
+state machines run an 8-bit PWM at ~62 kHz on them, one inverted, so
 the disc sees the difference and swings the full 6.6 V; DMA feeds each
 machine one sample per tick of a DMA pacing timer set to the WAV's rate.
 Nothing runs in Python while it plays, so it can overlap the lamp test.
@@ -32,7 +32,8 @@ from machine import Pin, freq, mem32
 # One-shot 8-bit PWM. Y counts the period down; the pin goes high the
 # moment Y meets the sample in X and stays high to the end, so duty is
 # proportional to the sample. Both loop paths are three cycles, giving
-# 3 * 256 + 3 = 771 cycles a period: ~162 kHz at 125 MHz. pull(noblock)
+# 3 * 256 + 3 = 771 cycles a period: ~62 kHz at the 48 MHz the machines
+# run at (see BootSound). pull(noblock)
 # keeps the last sample when the FIFO is empty, so DMA only has to
 # deliver one byte per sample period and the machine repeats it.
 # out(x, 8) rather than mov(x, osr): DMA byte writes may reach the FIFO
@@ -69,9 +70,24 @@ def _pwm_neg():
 
 
 _PERIOD = 255                       # 8-bit samples map 1:1 onto the duty
+_PIO_HZ = 48_000_000                # PWM carrier = _PIO_HZ / 771 = ~62 kHz, see below
+_PADS_BANK0 = 0x4001C000            # pad control; GPIOn at +4 + 4n
 _PIO0_TXF0 = 0x50200010             # PIO0 TX FIFO for SM0; +4 per SM
 _DMA_TIMER0 = 0x50000420            # DMA pacing timers; +4 per timer
 _TREQ_TIMER0 = 0x3B                 # DREQ number of DMA timer 0; +1 per timer
+
+
+def stiff_pad(pin):
+    """Drive a piezo pin as hard as the RP2040 allows: 12 mA, fast slew.
+
+    A piezo disc is a capacitor of 10-30 nF, and what limits how fast
+    (so how loudly) it moves is the current the pad can source. The
+    default is 4 mA; MicroPython's Pin has no knob for it, so set the
+    pad register directly. Survives Pin()/PIO re-init, which only touch
+    the function and direction bits.
+    """
+    addr = _PADS_BANK0 + 4 + 4 * pin
+    mem32[addr] = (mem32[addr] & ~0x30) | 0x30 | 0x01   # DRIVE=12mA, SLEWFAST
 
 
 class WavError(Exception):
@@ -166,7 +182,13 @@ class BootSound:
         for i, (pin, prog) in enumerate(((pin_a, _pwm_pos), (pin_b, _pwm_neg))):
             if pin is None:
                 continue
-            sm = rp2.StateMachine(i, prog, freq=freq(), sideset_base=Pin(pin))
+            stiff_pad(pin)
+            # 48 MHz, not the full 125: the piezo has to charge and
+            # discharge through the pad every carrier period, and at
+            # 163 kHz (6 us) a 20 nF disc at 12 mA cannot get near the
+            # rails, so the PWM never delivers its swing. ~62 kHz (16 us)
+            # is still far above hearing and gives it ~9 V of headroom.
+            sm = rp2.StateMachine(i, prog, freq=_PIO_HZ, sideset_base=Pin(pin))
             sm.put(_PERIOD)             # period -> ISR, once
             sm.exec("pull()")
             sm.exec("out(isr, 32)")

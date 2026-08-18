@@ -5,6 +5,7 @@
 
     tools/wav2boot.py in.wav boot.wav            # 16 kHz, 8-bit, mono
     tools/wav2boot.py in.wav boot.wav --rate 22050 --seconds 3 --gain 1.5
+    tools/wav2boot.py DING.WAV boot.wav --rate 22050 --normalize
 
 Output is mono, 8-bit unsigned PCM, at --rate (16 kHz default): the
 device reads those bytes straight into its play buffer with no
@@ -75,12 +76,19 @@ def main():
     ap.add_argument('--seconds', type=float, default=None,
                     help='trim to this length')
     ap.add_argument('--gain', type=float, default=1.0)
+    ap.add_argument('--normalize', action='store_true',
+                    help='scale so the peak hits full scale first (Windows '
+                         'sounds often sit at half level, 6 dB down)')
     args = ap.parse_args()
 
     rate, vals = read_wav(args.src)
     vals = resample(vals, rate, args.rate)
     if args.seconds is not None:
         vals = vals[:int(args.seconds * args.rate)]
+    if args.normalize:
+        peak = max((abs(v) for v in vals), default=0.0)
+        if peak > 0:
+            vals = [v / peak for v in vals]
     if args.gain != 1.0:
         vals = [max(-1.0, min(1.0, v * args.gain)) for v in vals]
     n = write_wav8(args.dst, args.rate, vals)

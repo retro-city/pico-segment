@@ -23,10 +23,14 @@ through an HT16K33A over I2C.
   `BOOT_SOUND_MAX_KB`). Mono PCM, 8 or 16-bit, 2–48 kHz; 8-bit is the
   fast path and `tools/wav2boot.py` makes one from any WAV. 16 kHz
   suits a piezo — it barely moves below ~1 kHz, so bass is wasted
-  bytes — and RAM caps the length at about 6 s; longer files play
-  truncated. Playback is PIO + DMA on the clicker pins (one machine per
-  pin, one inverted, so the disc sees the full 6.6 V swing) and costs
-  the CPU nothing, so the lamp test does not wait for it. A bad file is
+  bytes — and RAM caps the length at 96 000 samples (6 s at 16 kHz,
+  4.4 s at 22.05 kHz); longer files play truncated. Playback is PIO +
+  DMA on the clicker pins (one machine per pin, one inverted, so the
+  disc sees the full 6.6 V swing; ~62 kHz carrier, chosen so the disc
+  can actually charge to the rails each cycle) and costs the CPU
+  nothing, so the lamp test does not wait for it. Many stock sounds sit
+  well below full scale (Windows 95's ding peaks at 46 %); pass
+  `--normalize` to `wav2boot.py` for the missing 6 dB. A bad file is
   reported on the serial console and skipped; the panel never fails to
   boot over a sound. `sounds/spinup.wav` is a synthesized drive
   spin-up to start from (`tools/mkspinup.py` regenerates it).
@@ -64,8 +68,13 @@ through an HT16K33A over I2C.
   chatters. Nothing blocks. The piezo sits *between* GP22 and GP26
   (`CLICK_PIN`/`CLICK_PIN_B`), driven in antiphase so every edge swings
   6.6 V rather than the 3.3 V one pin can manage; `CLICK_PIN_B = None`
-  for piezo-to-GND at half the swing. `CLICK_ENABLED = False` removes
-  it entirely.
+  for piezo-to-GND at half the swing. The pads are set to their 12 mA
+  drive with fast slew (a piezo is a capacitor; current is what moves
+  it), so no series resistor — it would only slow the edges. Beyond
+  that, loudness is mechanical: a disc dangling on its wires is quiet;
+  glued by its rim over a hole in a panel, with air behind it, the same
+  disc is several times louder. `CLICK_ENABLED = False` removes it
+  entirely.
 - **Clicker mute**: hold button B alone for `CLICK_MUTE_HOLD_MS` (3 s)
   to mute or unmute the clicker; the display scrolls `HDCLIC ON` /
   `HDCLIC OFF` (`CLICK_TEXT_ON`/`_OFF`) and the choice is saved in
@@ -110,7 +119,9 @@ line's flag if its LED works inverted.
 ## Files
 
 - `ht16k33_seg.py` — display driver (digits, text, numbers, scroll, LEDs, brightness, blink)
-- `config.py` — user settings: speed, LED roles, HDD polarity, brightness
+- `config.py` — defaults and hardware facts: pins, polarities, LED roles
+- `prefs.py` — the adjustable settings table, persisted in `settings.json`
+- `boot.py`, `seed.py` — run before USB; give a fresh drive its files
 - `main.py` — the front panel controller described above
 - `segtest.py` — board check: lights each segment/LED one at a time
 - `bootsound.py` — WAV player for the piezo (PIO PWM + DMA)
@@ -199,9 +210,28 @@ removable drive named **PICOSEGMENT** (plus the usual serial port).
 Since the code is frozen, the drive holds just two things, and the
 panel puts them there itself:
 
-- `settings.json` — turbo state, both MHz values, clicker mute. Edit it
-  and unplug; the panel adopts it the moment the cable comes out.
-  Recreated with defaults whenever it is missing (delete it to reset).
+- `settings.json` — everything adjustable, one key per line:
+
+  | key | what |
+  |---|---|
+  | `turbo` | turbo on/off |
+  | `mhz_turbo`, `mhz_normal` | the two speeds (`mhz_normal: null` = always show turbo) |
+  | `brightness` | display 0–15 |
+  | `spin_animation` | segment spin on speed change |
+  | `clicker` | HDD clicker on/off (what the B hold toggles) |
+  | `click_hold_ms` | list; a seek's two edges are this far apart, cycled |
+  | `click_gap_ms` | shortest spacing between seeks |
+  | `hdd_min_on_ms` | how long an activity pulse keeps the LED (and clicks) going |
+  | `boot_sound` | file to play at power-on; `null` for none |
+  | `egg_text` | what the easter egg scrolls |
+
+  Edit it and unplug; the panel adopts it the moment the cable comes
+  out (`boot_sound` at the next power-on). Values are validated on the
+  way in, so a typo cannot wedge the panel — a bad value keeps the
+  previous one. Recreated with defaults whenever it is missing (delete
+  it to reset). Hardware facts — pins, polarities, which HDD lines exist
+  — stay in `config.py`; a `config.py` copied onto the drive shadows the
+  frozen one, so even those can be changed without a rebuild.
 - `boot.wav` — the boot sound. Replace it with your own, or delete it
   for silence. A freshly formatted drive gets the built-in default
   (`sounds/spinup.wav`, frozen in as `defaultsound.py`); it only comes

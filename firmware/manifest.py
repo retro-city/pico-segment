@@ -36,6 +36,7 @@ else:
 freeze("..", (
     "boot.py",
     "seed.py",
+    "prefs.py",
     "main.py",
     "config.py",
     "ht16k33_seg.py",

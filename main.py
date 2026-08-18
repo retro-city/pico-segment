@@ -33,13 +33,13 @@ Behavior:
     so even microsecond pulses wait around for the poll.
 """
 
-import json
 import time
-from machine import Pin, mem32
+from machine import Pin
 
 import bootsound
 import config
 from ht16k33_seg import SegmentDisplay
+from prefs import Settings, usb_host_present
 
 BTN_TURBO = Pin(7, Pin.IN)   # SW2 / BUTT-B, active low, external pull-up
 BTN_RESET = Pin(8, Pin.IN)   # SW1 / BUTT-A, active low, external pull-up
@@ -57,7 +57,7 @@ BIG_STEP_REPEAT_MS = 240  # setup: slower auto-repeat while stepping +-10
 
 # The adjustable speed runs on a display grid: 1 MHz steps up to 999,
 # then 10 MHz steps shown as GHz with two decimals (1.00 ... 9.99).
-MHZ_MAX = 9990
+from prefs import MHZ_MAX
 _IDX_MAX = 999 + (MHZ_MAX - 1000) // 10 + 1
 
 
@@ -75,121 +75,6 @@ def show_mhz(disp, mhz):
         disp.number(mhz)
     else:
         disp.show('%d.%02d' % (mhz // 1000, (mhz % 1000) // 10))
-
-
-# --- USB drive ----------------------------------------------------------
-# The USB-drive images expose the filesystem to the PC as mass storage,
-# raw flash sectors with no locking, so two parties keep their own idea
-# of the FAT. Rule: while a host is attached the PC owns the drive; the
-# panel keeps its changes in RAM and settles up when the host goes.
-
-_SIE_STATUS = 0x50110050   # RP2040 USB controller status register
-
-
-def usb_host_present():
-    """True while a USB host has the panel enumerated and awake.
-
-    Read off the USB controller rather than VBUS: on this board VBUS is
-    also the power input, so it is high whenever the panel is on. With
-    no host the bus idles and the SUSPENDED bit sets within 3 ms; a
-    host that keeps us enumerated sends a frame every millisecond.
-    """
-    v = mem32[_SIE_STATUS]
-    return bool(v & (1 << 16)) and not (v & (1 << 4))   # CONNECTED, !SUSPENDED
-
-
-def _refresh_fs():
-    """Drop FatFs' cached view of the flash after the host has had it.
-
-    Only on a FAT filesystem (the USB-drive images); a LittleFS build
-    has no host to share with and is left alone.
-    """
-    try:
-        import vfs
-        import rp2
-        fs = vfs.VfsFat(rp2.Flash())   # raises if the flash is not FAT
-    except Exception:
-        return
-    vfs.umount('/')
-    vfs.mount(fs, '/')
-
-
-class Settings:
-    """Persistent state: turbo flag, both MHz values, clicker mute.
-
-    Reads and writes settings.json, deferring writes while a USB host
-    owns the drive: save() then just marks the state dirty, and sync()
-    -- called when the host goes away -- either adopts a file the host
-    edited or writes the deferred state out. The file wins a conflict;
-    someone went to the trouble of editing it.
-    """
-
-    PATH = 'settings.json'
-
-    def __init__(self):
-        self.dirty = False
-        self._raw = None      # file content as last read/written
-        self._defaults()
-        self._load()
-
-    def _defaults(self):
-        self.turbo = config.TURBO_ON_AT_BOOT
-        self.mhz_turbo = config.MHZ_TURBO
-        self.mhz_normal = config.MHZ_NORMAL
-        self.clicker = True  # sound on; CLICK_ENABLED decides if it exists
-
-    def _load(self):
-        try:
-            with open(self.PATH, 'rb') as f:
-                raw = f.read()
-            d = json.loads(raw)
-            self.turbo = bool(d.get('turbo', self.turbo))
-            self.mhz_turbo = self._clamp(d.get('mhz_turbo', self.mhz_turbo))
-            n = d.get('mhz_normal', self.mhz_normal)
-            self.mhz_normal = None if n is None else self._clamp(n)
-            self.clicker = bool(d.get('clicker', self.clicker))
-            self._raw = raw
-        except (OSError, ValueError, TypeError):
-            pass  # missing or corrupt file -> what we had (defaults at boot)
-
-    @staticmethod
-    def _clamp(mhz):
-        return min(MHZ_MAX, max(1, int(mhz)))
-
-    def save(self):
-        """Write now, or defer if the PC owns the drive. True if written."""
-        if usb_host_present():
-            self.dirty = True
-            return False
-        raw = json.dumps({'turbo': self.turbo,
-                          'mhz_turbo': self.mhz_turbo,
-                          'mhz_normal': self.mhz_normal,
-                          'clicker': self.clicker})
-        try:
-            with open(self.PATH, 'w') as f:
-                f.write(raw)
-        except OSError:
-            return False  # keep running even if the flash write fails
-        self._raw = raw.encode()
-        self.dirty = False
-        return True
-
-    def sync(self):
-        """The host has gone: settle up. True if the file changed us."""
-        _refresh_fs()
-        try:
-            with open(self.PATH, 'rb') as f:
-                raw = f.read()
-        except OSError:
-            raw = None
-        if raw is not None and raw != self._raw:
-            self._defaults()   # a pared-down file means "back to defaults"
-            self._load()
-            self.dirty = False
-            return True
-        if self.dirty:
-            self.save()
-        return False
 
 
 class DebouncedPin:
@@ -362,18 +247,24 @@ class Clicker:
     piezo fitted, the class is inert.
     """
 
-    def __init__(self, muted=False):
+    def __init__(self, settings):
+        self.s = settings                # click_hold_ms, click_gap_ms, clicker
         self.pin_a = None
         self.pin_b = None
-        self.muted = muted               # user's choice; the pin stays claimed
         self.next_at = time.ticks_ms()   # earliest next seek
         self.release_at = None           # when the pending second edge lands
         self._pol = 0
         self._i = 0
         if config.CLICK_ENABLED:
             self.pin_a = Pin(config.CLICK_PIN, Pin.OUT, value=0)
+            bootsound.stiff_pad(config.CLICK_PIN)
             if config.CLICK_PIN_B is not None:
                 self.pin_b = Pin(config.CLICK_PIN_B, Pin.OUT, value=1)
+                bootsound.stiff_pad(config.CLICK_PIN_B)
+
+    @property
+    def muted(self):
+        return not self.s.clicker
 
     def _edge(self):
         # Every edge reverses the voltage across the piezo. Single-ended
@@ -394,10 +285,10 @@ class Clicker:
         if not force and time.ticks_diff(now, self.next_at) < 0:
             return
         self._edge()  # head moves
-        holds = config.CLICK_HOLD_MS
+        holds = self.s.click_hold_ms
         self.release_at = time.ticks_add(now, holds[self._i % len(holds)])
         self._i += 1  # walk the hold table so seeks are not all alike
-        self.next_at = time.ticks_add(now, config.CLICK_GAP_MS)
+        self.next_at = time.ticks_add(now, self.s.click_gap_ms)
 
     def service(self, now):
         """Deliver the pending second edge once due. Call every loop."""
@@ -446,11 +337,11 @@ def spin(disp):
         time.sleep_ms(config.SPIN_FRAME_MS)
 
 
-def easter_egg(disp, clicker):
+def easter_egg(disp, clicker, text):
     """The drive 'loads' the message: seek burst first, then the text."""
     spin(disp)
     hdd_burst(disp, clicker)
-    disp.scroll(config.EGG_TEXT, config.EGG_SCROLL_MS)
+    disp.scroll(text, config.EGG_SCROLL_MS)
     spin(disp)
 
 
@@ -552,7 +443,7 @@ def run():
     global hdd_pulse
 
     settings = Settings()   # boot.py has already seeded settings.json
-    disp = SegmentDisplay(brightness=config.BRIGHTNESS)
+    disp = SegmentDisplay(brightness=settings.brightness)
     TURBO_OUT.value(settings.turbo)  # tell the motherboard first
     set_lock_out(lock_engaged(BTN_LOCK.value() == 0))
 
@@ -582,7 +473,7 @@ def run():
         save_settings()
         TURBO_OUT.value(settings.turbo)
         disp.led(config.TURBO_LED, settings.turbo)
-        if config.SPIN_ANIMATION and settings.mhz_normal is not None:
+        if settings.spin_animation and settings.mhz_normal is not None:
             spin(disp)
         show_speed()
 
@@ -590,8 +481,8 @@ def run():
     # the boot sound (if a file is there) playing over the top -- it
     # runs on PIO/DMA, so the lamp test does not wait for it.
     snd = None
-    if config.BOOT_SOUND and config.CLICK_ENABLED:
-        snd = bootsound.play(config.BOOT_SOUND, config.BOOT_SOUND_MAX_KB * 1024,
+    if settings.boot_sound and config.CLICK_ENABLED:
+        snd = bootsound.play(settings.boot_sound, config.BOOT_SOUND_MAX_KB * 1024,
                              config.CLICK_PIN, config.CLICK_PIN_B)
     show_speed()
     disp.leds(True, True, True)
@@ -609,21 +500,21 @@ def run():
     if snd is not None:
         snd.wait()   # a sound longer than the lamp test finishes here
         snd.stop()   # ...and hands the piezo pins to the clicker
-    clicker = Clicker(muted=not settings.clicker)
+    clicker = Clicker(settings)
 
     def toggle_clicker():
-        settings.clicker = not settings.clicker
+        settings.clicker = not settings.clicker   # the clicker reads it live
         save_settings()
-        clicker.muted = not settings.clicker
         disp.scroll(config.CLICK_TEXT_ON if settings.clicker
                     else config.CLICK_TEXT_OFF, config.CLICK_TEXT_SCROLL_MS)
         show_speed()
 
     def apply_settings():
-        # The host edited settings.json: make the panel match it.
+        # The host edited settings.json: make the panel match it. The
+        # clicker and HDD timings are read live; boot_sound at next boot.
         TURBO_OUT.value(settings.turbo)
         disp.led(config.TURBO_LED, settings.turbo)
-        clicker.muted = not settings.clicker
+        disp.brightness(settings.brightness)
         show_speed()
 
     btn_a = DebouncedPin(BTN_RESET)
@@ -675,7 +566,7 @@ def run():
         if (egg_armed and btn_a.down and not btn_b.down
                 and btn_a.held_ms() >= config.EGG_HOLD_MS):
             egg_armed = False
-            easter_egg(disp, clicker)
+            easter_egg(disp, clicker, settings.egg_text)
             disp.led(config.HDD_LED, hdd_lit)  # the burst borrowed the LED
             show_speed()
 
@@ -715,14 +606,14 @@ def run():
         # genuine hold and a stale latch.
         if hdd_pulse or (not hdd_lit and hdd_active()):
             hdd_pulse = False
-            hdd_off_at = time.ticks_add(now, config.HDD_MIN_ON_MS)
+            hdd_off_at = time.ticks_add(now, settings.hdd_min_on_ms)
             if not hdd_lit:
                 hdd_lit = True
                 disp.led(config.HDD_LED, True)
         elif hdd_lit and time.ticks_diff(now, hdd_off_at) >= 0:
             kick_hdd_line()
             if hdd_active():  # source is genuinely still driving
-                hdd_off_at = time.ticks_add(now, config.HDD_MIN_ON_MS)
+                hdd_off_at = time.ticks_add(now, settings.hdd_min_on_ms)
             else:
                 hdd_lit = False
                 disp.led(config.HDD_LED, False)

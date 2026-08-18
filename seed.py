@@ -9,16 +9,15 @@ already talking to it (Linux then gives the port up entirely), and it
 guarantees the files exist before any host can mount the drive and
 cache a view without them.
 
-settings.json is (re)created whenever it is missing, with config.py's
-defaults. The default boot.wav is only written when BOTH files are
-missing -- a freshly formatted flash, or a deliberate delete-everything
+settings.json is (re)created whenever it is missing, with every
+adjustable key at its config.py default, so the file documents itself.
+The default boot.wav is only written when BOTH files are missing -- a freshly formatted flash, or a deliberate delete-everything
 reset -- so deleting just boot.wav still silences the panel, and
 deleting just settings.json still resets the settings and nothing else.
 """
 
-import json
-
 import config
+import prefs
 
 SETTINGS = 'settings.json'
 
@@ -35,10 +34,7 @@ def seed():
     fresh = not _exists(SETTINGS)
     if fresh:
         with open(SETTINGS, 'w') as f:
-            f.write(json.dumps({'turbo': config.TURBO_ON_AT_BOOT,
-                                'mhz_turbo': config.MHZ_TURBO,
-                                'mhz_normal': config.MHZ_NORMAL,
-                                'clicker': True}))
+            f.write(prefs.dumps(prefs.defaults()))   # every key, one per line
     if (fresh and config.BOOT_SOUND and config.BOOT_SOUND_SEED_DEFAULT
             and not _exists(config.BOOT_SOUND)):
         try:
