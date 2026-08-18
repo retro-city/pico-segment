@@ -49,9 +49,10 @@ through an HT16K33A over I2C.
   the head "moves" and another `CLICK_HOLD_MS` later as it "lands" (the
   table is cycled so seeks are not all alike), spaced no closer than
   `CLICK_GAP_MS` — one brief access clicks once, a long transfer
-  chatters. Nothing blocks. Louder: set `CLICK_PIN_B` and wire the
-  piezo between the two pins; they are driven in antiphase, so every
-  edge swings 6.6 V instead of 3.3 V. `CLICK_ENABLED = False` removes
+  chatters. Nothing blocks. The piezo sits *between* GP22 and GP26
+  (`CLICK_PIN`/`CLICK_PIN_B`), driven in antiphase so every edge swings
+  6.6 V rather than the 3.3 V one pin can manage; `CLICK_PIN_B = None`
+  for piezo-to-GND at half the swing. `CLICK_ENABLED = False` removes
   it entirely.
 - **Clicker mute**: hold button B alone for `CLICK_MUTE_HOLD_MS` (3 s)
   to mute or unmute the clicker; the display scrolls `HDCLIC ON` /
@@ -92,7 +93,7 @@ line's flag if its LED works inverted.
 | LED4 (`GREEN` in code) | ROW10, cathode on COM3 |
 | Button A / B / C | SW1 / SW2 / J1 on GP8 / GP7 / GP6, active low, 10k pull-ups |
 | GP18–21 | level-shifted to 5 V on J3 (odd pins signals, even pins GND): GP21 = reset out (J3-1), GP20 = turbo out (J3-3), GP19 = lock out (J3-5), GP18 = HDD in (J3-7) |
-| GP22 | HDD clicker: passive piezo to GND, driven by DC edges (not on J3 — taken off the Pico header). Optionally piezo between GP22 and `CLICK_PIN_B` for twice the swing |
+| GP22 + GP26 | HDD clicker: passive piezo *between* Pico pins 29 and 31, driven in antiphase by DC edges for a 6.6 V swing (`CLICK_PIN`/`CLICK_PIN_B`; not on J3). Pin 30 between them is RUN — keep solder off it. `CLICK_PIN_B = None` for piezo-to-GND at half the swing |
 
 ## Files
 

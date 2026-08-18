@@ -96,15 +96,17 @@ HDD_MIN_ON_MS = 50
 # CLICK_GAP_MS, so a brief access clicks once and a long transfer
 # chatters.
 #
-# Wire a passive piezo between CLICK_PIN and any GND pin; a bare disc can
-# hang straight off the pin (it is capacitive), ~100R in series is a
-# harmless precaution. Louder: set CLICK_PIN_B and put the piezo between
-# the two pins instead of to ground -- they are driven in antiphase, so
-# every edge swings 6.6 V rather than 3.3 V. An ACTIVE buzzer will not
+# The piezo sits BETWEEN the two pins, no ground: they are driven in
+# antiphase, so every edge swings 6.6 V rather than the 3.3 V a single
+# pin can manage. GP22 is Pico pin 29 and GP26 is pin 31 -- pin 30
+# between them is RUN, the reset line, so keep solder off it. A bare
+# disc can hang straight across the pins (it is capacitive); ~100R in
+# series is a harmless precaution. Set CLICK_PIN_B = None for a plain
+# piezo-to-GND wiring at half the swing. An ACTIVE buzzer will not
 # work: it has its own oscillator and just drones while the line is high.
 CLICK_ENABLED = True
 CLICK_PIN = 22
-CLICK_PIN_B = None                      # e.g. 26 for push-pull drive
+CLICK_PIN_B = 26
 CLICK_HOLD_MS = (18, 26, 14, 32, 22)    # move-to-land, per seek, cycled
 CLICK_GAP_MS = 60                       # shortest spacing between seeks
 
