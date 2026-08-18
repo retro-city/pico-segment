@@ -21,6 +21,8 @@ Behavior:
     current turbo state blinks; B = +1 MHz, A = -1 MHz (hold to
     repeat), A+B together saves and exits. The reset output to the
     motherboard is suspended while setup is open.
+  - A passive piezo on CLICK_PIN ticks while the HDD LED is lit, so the
+    silent CF card still sounds like a mechanical drive seeking.
   - The HDD LED mirrors activity on every input in config.HDD_INPUTS:
     direct GPIO lines by edge IRQ, TXB-backed lines by polling only —
     the TXB latches the active level until it is kicked back to idle,
@@ -29,7 +31,7 @@ Behavior:
 
 import json
 import time
-from machine import Pin
+from machine import Pin, PWM
 
 import config
 from ht16k33_seg import SegmentDisplay
@@ -254,6 +256,43 @@ def kick_hdd_line():
         line.kick()
 
 
+# --- HDD clicker --------------------------------------------------------
+
+class Clicker:
+    """Piezo ticks standing in for a mechanical drive's seek noise.
+
+    A tick blocks for CLICK_MS, which hides inside the loop's own 10 ms
+    sleep: the reset mirror runs off an interrupt and the buttons
+    debounce over 30 ms, so nothing upstream notices the pause. Disabled
+    (or with no piezo fitted) the whole class is inert.
+    """
+
+    def __init__(self):
+        self.pwm = None
+        self.next_at = time.ticks_ms()
+        self._freq = 0
+        if config.CLICK_ENABLED:
+            self.pwm = PWM(Pin(config.CLICK_PIN))
+            self.pwm.duty_u16(0)  # silent until something seeks
+
+    def tick(self, now):
+        """Click once, unless the previous tick was too recent."""
+        if self.pwm is None or time.ticks_diff(now, self.next_at) < 0:
+            return
+        # Rotate the pitch so sustained activity chatters like a head
+        # stepping around rather than beeping on one note.
+        self._freq = (self._freq + 1) % len(config.CLICK_FREQS)
+        self.pwm.freq(config.CLICK_FREQS[self._freq])
+        self.pwm.duty_u16(config.CLICK_DUTY)
+        time.sleep_ms(config.CLICK_MS)
+        self.pwm.duty_u16(0)
+        self.next_at = time.ticks_add(now, config.CLICK_GAP_MS)
+
+    def silence(self):
+        if self.pwm is not None:
+            self.pwm.duty_u16(0)
+
+
 # --- display bits -------------------------------------------------------
 
 def spin(disp):
@@ -411,6 +450,7 @@ def run():
     kick_hdd_line()
     arm_hdd_lines()
 
+    clicker = Clicker()
     btn_a = DebouncedPin(BTN_RESET)
     btn_b = DebouncedPin(BTN_TURBO)
     btn_c = DebouncedPin(BTN_LOCK)
@@ -490,6 +530,12 @@ def run():
                 hdd_lit = False
                 disp.led(config.HDD_LED, False)
                 arm_hdd_lines()  # dark again — listen for the next burst
+
+        # Click for as long as the LED is lit; the clicker rate-limits
+        # itself, so one short access ticks once and a long transfer
+        # chatters.
+        if hdd_lit:
+            clicker.tick(now)
 
         time.sleep_ms(10)
 

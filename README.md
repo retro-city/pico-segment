@@ -39,6 +39,13 @@ through an HT16K33A over I2C.
   edges make the TXB oscillate, which would storm an IRQ — its latch
   holds each pulse until polled instead). Pulses are stretched to
   `HDD_MIN_ON_MS` so short bursts stay visible.
+- **HDD clicker**: a passive piezo on **GP22** (`CLICK_PIN`) ticks while
+  that LED is lit, so the silent CF card still sounds like a drive
+  seeking. Each tick is a short PWM burst (`CLICK_MS`, `CLICK_DUTY`)
+  cycling through `CLICK_FREQS` so it chatters rather than beeping on
+  one note, spaced no closer than `CLICK_GAP_MS` — one brief access
+  clicks once, a long transfer rattles. `CLICK_ENABLED = False` makes
+  the whole thing inert.
 - **Lock**: J1 (button C) is a maintained keyboard-lock switch and
   **GP19** (5 V on J3 pin 5) follows its position, high = locked
   (`LOCK_ACTIVE_HIGH`; `LOCK_SWITCH_ACTIVE_LOW` sets which way the
@@ -68,6 +75,7 @@ line's flag if its LED works inverted.
 | LED4 (`GREEN` in code) | ROW10, cathode on COM3 |
 | Button A / B / C | SW1 / SW2 / J1 on GP8 / GP7 / GP6, active low, 10k pull-ups |
 | GP18–21 | level-shifted to 5 V on J3 (odd pins signals, even pins GND): GP21 = reset out (J3-1), GP20 = turbo out (J3-3), GP19 = lock out (J3-5), GP18 = HDD in (J3-7) |
+| GP22 | HDD clicker: passive piezo to GND, driven by PWM (not on J3 — taken off the Pico header) |
 
 ## Files
 

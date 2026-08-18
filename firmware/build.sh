@@ -25,9 +25,21 @@ if [ ! -d "$MPY_DIR/ports/rp2" ]; then
     exit 1
 fi
 
+MANIFEST="$REPO/firmware/manifest.py"
+
+# cmake bakes the manifest path into its cache, so a build tree from
+# before this repo was moved or renamed keeps pointing at the old path
+# and fails with "no such file". Drop the tree when it disagrees.
+CACHE="$MPY_DIR/ports/rp2/build-$BOARD/CMakeCache.txt"
+if [ -f "$CACHE" ] &&
+   ! grep -q "^MICROPY_FROZEN_MANIFEST:[A-Z]*=$MANIFEST\$" "$CACHE"; then
+    echo "cmake cache points at another manifest; reconfiguring $BOARD"
+    rm -rf "$MPY_DIR/ports/rp2/build-$BOARD"
+fi
+
 make -C "$MPY_DIR/ports/rp2" \
     BOARD="$BOARD" \
-    FROZEN_MANIFEST="$REPO/firmware/manifest.py" \
+    FROZEN_MANIFEST="$MANIFEST" \
     -j"$(nproc)"
 
 mkdir -p "$OUT"

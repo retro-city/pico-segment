@@ -84,5 +84,22 @@ HDD_INPUTS = (
 # bursts are still visible.
 HDD_MIN_ON_MS = 50
 
+# HDD clicker. The CF card standing in for the hard disk is silent, so a
+# passive piezo imitates the seek chatter of a mechanical drive. One tick
+# is a short PWM burst; ticks repeat for as long as the activity LED is
+# lit, no closer together than CLICK_GAP_MS, so a brief access gives a
+# single click and a long transfer chatters instead of buzzing.
+#
+# Wire a passive piezo between CLICK_PIN and any GND pin. A bare disc can
+# hang straight off the pin (it is capacitive and draws little at these
+# frequencies); ~100R in series is a harmless precaution. An ACTIVE
+# buzzer will not work — it has its own oscillator and ignores the tone.
+CLICK_ENABLED = True
+CLICK_PIN = 22
+CLICK_FREQS = (1800, 2400, 2050, 2700)  # cycled, so ticks are not identical
+CLICK_MS = 5          # length of one tick
+CLICK_DUTY = 32768    # 16-bit duty; half is the loudest square wave
+CLICK_GAP_MS = 60     # shortest spacing between ticks
+
 # Display brightness, 0..15.
 BRIGHTNESS = 15
