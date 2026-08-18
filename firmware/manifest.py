@@ -37,6 +37,7 @@ freeze("..", (
     "main.py",
     "config.py",
     "ht16k33_seg.py",
+    "bootsound.py",
     "hddprobe.py",
     "segtest.py",
 ))

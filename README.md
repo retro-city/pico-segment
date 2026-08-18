@@ -18,6 +18,18 @@ through an HT16K33A over I2C.
   down from `1.00` returns to `999`.
 - At power-on all three LEDs light for 2 seconds (lamp test), then only the
   **power** LED stays lit. Turbo starts on (`TURBO_ON_AT_BOOT`).
+- **Boot sound**: if a `boot.wav` is on the Pico's filesystem it plays
+  through the piezo over the lamp test (`BOOT_SOUND`,
+  `BOOT_SOUND_MAX_KB`). Mono PCM, 8 or 16-bit, 2–48 kHz; 8-bit is the
+  fast path and `tools/wav2boot.py` makes one from any WAV. 16 kHz
+  suits a piezo — it barely moves below ~1 kHz, so bass is wasted
+  bytes — and RAM caps the length at about 6 s; longer files play
+  truncated. Playback is PIO + DMA on the clicker pins (one machine per
+  pin, one inverted, so the disc sees the full 6.6 V swing) and costs
+  the CPU nothing, so the lamp test does not wait for it. A bad file is
+  reported on the serial console and skipped; the panel never fails to
+  boot over a sound. `sounds/spinup.wav` is a synthesized drive
+  spin-up to start from (`tools/mkspinup.py` regenerates it).
 - **Turbo** toggles when button B (SW2) is *released*. The turbo LED
   follows it, and **GP20** (5 V on J3 pin 3) drives the motherboard:
   high = turbo on. Speed changes play a segment spin animation
@@ -101,6 +113,9 @@ line's flag if its LED works inverted.
 - `config.py` — user settings: speed, LED roles, HDD polarity, brightness
 - `main.py` — the front panel controller described above
 - `segtest.py` — board check: lights each segment/LED one at a time
+- `bootsound.py` — WAV player for the piezo (PIO PWM + DMA)
+- `sounds/spinup.wav` — example boot sound; `tools/mkspinup.py` made it
+- `tools/wav2boot.py` — converts any WAV to the panel's 8-bit mono format
 - `firmware/RPI_PICO_W-v1.28.0.uf2` — stock MicroPython for the Pico W
 - `firmware/manifest.py`, `firmware/build.sh` — build a UF2 with the
   panel frozen in (see [All-in-one UF2](#all-in-one-uf2))
@@ -120,7 +135,8 @@ line's flag if its LED works inverted.
 ## Deploy and run
 
 ```sh
-tools/mpr cp ht16k33_seg.py config.py main.py segtest.py :   # copy to board
+tools/mpr cp ht16k33_seg.py config.py main.py bootsound.py segtest.py :   # copy to board
+tools/mpr cp sounds/spinup.wav :boot.wav           # optional boot sound
 tools/mpr run segtest.py                           # verify every segment/LED
 tools/mpr reset                                    # reboot -> front panel runs
 ```

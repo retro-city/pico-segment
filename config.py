@@ -117,6 +117,17 @@ CLICK_TEXT_ON = 'HDCLIC ON'
 CLICK_TEXT_OFF = 'HDCLIC OFF'
 CLICK_TEXT_SCROLL_MS = 200
 
+# Boot sound: a WAV on the Pico's filesystem, played through the piezo
+# during the power-on lamp test. Copy it over with
+#   tools/mpr cp boot.wav :
+# (or onto the USB drive). Mono PCM, 8-bit unsigned is the fast path --
+# tools/wav2boot.py makes one from any WAV. 16 kHz suits a piezo: it
+# cannot do much below ~1 kHz, so bass is wasted bytes. RAM caps the
+# length; longer files play truncated. None disables it. Needs the
+# clicker pins (CLICK_ENABLED), since that is the speaker.
+BOOT_SOUND = 'boot.wav'
+BOOT_SOUND_MAX_KB = 96      # ~6 s at 16 kHz 8-bit
+
 # The drive burst played by the easter egg (hold reset): the HDD LED
 # flashes with a seek per flash, in these cycled uneven on/off times, so
 # it reads as a drive working rather than a blinking light. Doubles as a

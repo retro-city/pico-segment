@@ -7,7 +7,8 @@ Behavior:
     mhz_normal while it is off. Speeds and turbo state persist in
     settings.json; config.py supplies first-boot defaults.
   - All three LEDs light for 2 s at power-on, then only the power LED
-    stays lit.
+    stays lit. If a boot.wav is on the filesystem it plays through the
+    piezo meanwhile (see bootsound.py).
   - Button B (SW2, GP7) toggles turbo when released: turbo LED follows,
     GP20 (5 V on J3 pin 3) drives the motherboard (high = turbo on),
     state is saved, and the speed change plays a spin animation. Hold B
@@ -36,6 +37,7 @@ import json
 import time
 from machine import Pin
 
+import bootsound
 import config
 from ht16k33_seg import SegmentDisplay
 
@@ -496,7 +498,13 @@ def run():
             spin(disp)
         show_speed()
 
-    # Power-on: speed on the display, all LEDs lit for 2 seconds.
+    # Power-on: speed on the display, all LEDs lit for 2 seconds, and
+    # the boot sound (if a file is there) playing over the top -- it
+    # runs on PIO/DMA, so the lamp test does not wait for it.
+    snd = None
+    if config.BOOT_SOUND and config.CLICK_ENABLED:
+        snd = bootsound.play(config.BOOT_SOUND, config.BOOT_SOUND_MAX_KB * 1024,
+                             config.CLICK_PIN, config.CLICK_PIN_B)
     show_speed()
     disp.leds(True, True, True)
     time.sleep(2)
@@ -510,6 +518,9 @@ def run():
     kick_hdd_line()
     arm_hdd_lines()
 
+    if snd is not None:
+        snd.wait()   # a sound longer than the lamp test finishes here
+        snd.stop()   # ...and hands the piezo pins to the clicker
     clicker = Clicker(muted=not settings.clicker)
 
     def toggle_clicker():
