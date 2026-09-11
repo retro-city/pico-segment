@@ -145,6 +145,13 @@ def lock_engaged(low):
     return low if config.LOCK_SWITCH_ACTIVE_LOW else not low
 
 
+def set_turbo_out(settings):
+    """Drive the turbo output from the turbo state, in the polarity the
+    motherboard wants (turbo_active_high in settings.json)."""
+    on = settings.turbo
+    TURBO_OUT.value(on if settings.turbo_active_high else not on)
+
+
 def set_lock_out(is_locked):
     """Drive the lock output, and remember it for the display."""
     global locked
@@ -449,7 +456,7 @@ def run():
 
     settings = Settings()   # boot.py has already seeded settings.json
     disp = SegmentDisplay(brightness=settings.brightness)
-    TURBO_OUT.value(settings.turbo)  # tell the motherboard first
+    set_turbo_out(settings)  # tell the motherboard first
     set_lock_out(lock_engaged(BTN_LOCK.value() == 0))
 
     # Reset button passes straight through to GP21, by interrupt so it
@@ -476,7 +483,7 @@ def run():
     def toggle_turbo():
         settings.turbo = not settings.turbo
         save_settings()
-        TURBO_OUT.value(settings.turbo)
+        set_turbo_out(settings)
         disp.led(config.TURBO_LED, settings.turbo)
         if settings.spin_animation and settings.mhz_normal is not None:
             spin(disp)
@@ -523,7 +530,7 @@ def run():
     def apply_settings():
         # The host edited settings.json: make the panel match it. The
         # clicker and HDD timings are read live; boot_sound at next boot.
-        TURBO_OUT.value(settings.turbo)
+        set_turbo_out(settings)
         disp.led(config.TURBO_LED, settings.turbo)
         disp.brightness(settings.brightness)
         show_speed()

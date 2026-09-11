@@ -89,6 +89,7 @@ def _text_or_none(v):
 # (key, default, validator). Order is the order in the file.
 FIELDS = (
     ('turbo',          lambda: config.TURBO_ON_AT_BOOT,   bool),
+    ('turbo_active_high', lambda: config.TURBO_ACTIVE_HIGH, bool),
     ('mhz_turbo',      lambda: config.MHZ_TURBO,          _mhz),
     ('mhz_normal',     lambda: config.MHZ_NORMAL,         _mhz_or_none),
     ('brightness',     lambda: config.BRIGHTNESS,         _int(0, 15)),

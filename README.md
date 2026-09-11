@@ -39,7 +39,11 @@ through an HT16K33A over I2C.
   spin-up to start from (`tools/mkspinup.py` regenerates it).
 - **Turbo** toggles when button B (SW2) is *released*. The turbo LED
   follows it, and **GP20** (5 V on J3 pin 3) drives the motherboard:
-  high = turbo on. Speed changes play a segment spin animation
+  high = turbo on by default; motherboards differ, so
+  `turbo_active_high: false` in `settings.json` (default
+  `TURBO_ACTIVE_HIGH`) inverts the line, with the LED and the displayed
+  speed still following the logical turbo state. Speed changes
+  play a segment spin animation
   (`SPIN_ANIMATION`, `SPIN_MS`, `SPIN_FRAME_MS`). The toggle waits for
   the release so a long hold can claim the press for the clicker mute
   below without flipping the speed on its way there.
@@ -223,6 +227,7 @@ panel puts them there itself:
   | key | what |
   |---|---|
   | `turbo` | turbo on/off |
+  | `turbo_active_high` | `false` if the motherboard wants GP20 low for turbo on |
   | `mhz_turbo`, `mhz_normal` | the two speeds (`mhz_normal: null` = always show turbo) |
   | `brightness` | display 0–15 |
   | `spin_animation` | segment spin on speed change |
@@ -237,8 +242,8 @@ panel puts them there itself:
   out (`boot_sound` at the next power-on). Values are validated on the
   way in, so a typo cannot wedge the panel — a bad value keeps the
   previous one. Recreated with defaults whenever it is missing (delete
-  it to reset). Hardware facts — pins, polarities, which HDD lines exist
-  — stay in `config.py`; a `config.py` copied onto the drive shadows the
+  it to reset). Hardware facts — pins, the other polarities, which HDD
+  lines exist — stay in `config.py`; a `config.py` copied onto the drive shadows the
   frozen one, so even those can be changed without a rebuild.
 - `boot.wav` — the boot sound. Replace it with your own, or delete it
   for silence. A freshly formatted drive gets the built-in default

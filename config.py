@@ -20,8 +20,13 @@ TURBO_ON_AT_BOOT = True
 SETUP_HOLD_MS = 2000
 
 # Turbo output to the motherboard: GP20, level-shifted to 5 V on J3 pin 3.
-# High = turbo on.
+# Motherboards differ on which way the turbo line reads: some run at
+# full speed with the line high, others with it low. This is the
+# default for turbo_active_high in settings.json, so it can be flipped
+# on the drive when the panel moves to another machine; the turbo LED
+# and the displayed speed follow the logical state either way.
 TURBO_OUT_PIN = 20
+TURBO_ACTIVE_HIGH = True  # GP20 high = turbo on (False: GP20 low = turbo on)
 
 # Keyboard-lock output to the motherboard: GP19, level-shifted to 5 V
 # on J3 pin 5, driving an optocoupler LED. J1 (button C, GP6) is a
