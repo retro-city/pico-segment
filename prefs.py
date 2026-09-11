@@ -54,11 +54,83 @@ def refresh_fs():
 
 # --- the table -----------------------------------------------------------
 
-MHZ_MAX = 9990
+# The speed runs on a display grid, three digits wide: 1 MHz steps up
+# to 999, then 10 MHz steps shown as GHz with two decimals (1.00 ...
+# 9.99), then 100 MHz steps with one decimal (10.0 ... 99.9). A value
+# off the grid is rounded to the nearest step, so what is stored is
+# exactly what the display shows. Setup mode steps through a single
+# index that runs across the bands, one display value per step. Bands
+# are (first value, last value, step, index of the first value).
+MHZ_BANDS = (
+    (1,     999,   1,   1),
+    (1000,  9990,  10,  1000),
+    (10000, 99900, 100, 1900),
+)
+MHZ_MAX = MHZ_BANDS[-1][1]
+IDX_MAX = MHZ_BANDS[-1][3] + (MHZ_BANDS[-1][1] - MHZ_BANDS[-1][0]) // MHZ_BANDS[-1][2]
+
+
+def _band(mhz):
+    for band in MHZ_BANDS:
+        if mhz <= band[1]:
+            return band
+    return MHZ_BANDS[-1]
+
+
+def snap_mhz(mhz):
+    """Clamp to 1..MHZ_MAX and round to the nearest grid value.
+
+    Rounded within each band and the closest candidate taken, so a
+    value in the gap between two bands (9991..9999, between 9.99 and
+    10.0) goes to whichever neighbour is nearer; ties round up.
+    """
+    mhz = min(MHZ_MAX, max(1, int(mhz)))
+    best = None
+    for lo, top, step, _ in MHZ_BANDS:
+        c = min(top, max(lo, (mhz + step // 2) // step * step))
+        if best is None or abs(c - mhz) < abs(best - mhz) or \
+                (abs(c - mhz) == abs(best - mhz) and c > best):
+            best = c
+    return best
+
+
+def mhz_to_idx(mhz):
+    lo, _, step, base = _band(mhz)
+    return base + (mhz - lo) // step
+
+
+def idx_to_mhz(idx):
+    idx = min(IDX_MAX, max(1, idx))
+    for lo, top, step, base in MHZ_BANDS:
+        if idx <= base + (top - lo) // step:
+            return lo + (idx - base) * step
+    return MHZ_MAX
+
+
+def fmt_mhz(mhz, band=None, pad=False):
+    """Display text: MHz up to 999, then x.xx GHz, then xx.x GHz.
+
+    `band` formats the value in another band's notation (rounded to
+    that band's step), and `pad` fills the three digits with leading
+    zeros -- together they show two speeds alike: 25000 and 8000 as
+    25.0 and 08.0 rather than 25.0 and 8.00.
+    """
+    lo, top, step, _ = band or _band(mhz)
+    v = min(top, max(0, (mhz + step // 2) // step * step))
+    if step == 1:
+        return ('%03d' if pad else '%d') % v
+    if step == 10:
+        return '%d.%02d' % (v // 1000, (v % 1000) // 10)
+    return ('%02d.%d' if pad else '%d.%d') % (v // 1000, (v % 1000) // 100)
+
+
+def speed_band(*speeds):
+    """The band both speeds share when padded: that of the higher one."""
+    return _band(max(s for s in speeds if s is not None))
 
 
 def _mhz(v):
-    return min(MHZ_MAX, max(1, int(v)))
+    return snap_mhz(v)
 
 
 def _mhz_or_none(v):
@@ -92,6 +164,7 @@ FIELDS = (
     ('turbo_active_high', lambda: config.TURBO_ACTIVE_HIGH, bool),
     ('mhz_turbo',      lambda: config.MHZ_TURBO,          _mhz),
     ('mhz_normal',     lambda: config.MHZ_NORMAL,         _mhz_or_none),
+    ('mhz_pad',        lambda: config.MHZ_PAD,            bool),
     ('brightness',     lambda: config.BRIGHTNESS,         _int(0, 15)),
     ('spin_animation', lambda: config.SPIN_ANIMATION,     bool),
     ('clicker',        lambda: True,                      bool),

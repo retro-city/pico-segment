@@ -55,26 +55,22 @@ STEP_REPEAT_MS = 80    # setup: auto-repeat interval for +-1 steps
 BIG_STEP_HOLD_MS = 2000  # setup: hold this long and steps become +-10
 BIG_STEP_REPEAT_MS = 240  # setup: slower auto-repeat while stepping +-10
 
-# The adjustable speed runs on a display grid: 1 MHz steps up to 999,
-# then 10 MHz steps shown as GHz with two decimals (1.00 ... 9.99).
-from prefs import MHZ_MAX
-_IDX_MAX = 999 + (MHZ_MAX - 1000) // 10 + 1
+# The adjustable speed runs on a display grid (see prefs.MHZ_BANDS):
+# setup mode steps through its index, one display value per step.
+from prefs import IDX_MAX as _IDX_MAX, mhz_to_idx as _mhz_to_idx, \
+    idx_to_mhz as _idx_to_mhz, fmt_mhz, speed_band
 
 
-def _mhz_to_idx(mhz):
-    return mhz if mhz <= 999 else 999 + (mhz - 1000) // 10 + 1
+def show_mhz(disp, mhz, settings, other=None):
+    """MHz as-is up to 999; above that as GHz with a decimal point.
 
-
-def _idx_to_mhz(idx):
-    return idx if idx <= 999 else 1000 + (idx - 1000) * 10
-
-
-def show_mhz(disp, mhz):
-    """MHz as-is up to 999; above that as GHz, DP on the first digit."""
-    if mhz <= 999:
-        disp.number(mhz)
+    With mhz_pad set, both speeds share the higher one's notation and
+    are zero-padded; `other` is the speed not being shown.
+    """
+    if settings.mhz_pad:
+        disp.show(fmt_mhz(mhz, speed_band(mhz, other), pad=True))
     else:
-        disp.show('%d.%02d' % (mhz // 1000, (mhz % 1000) // 10))
+        disp.show(fmt_mhz(mhz))
 
 
 class DebouncedPin:
@@ -404,6 +400,7 @@ def setup_mode(disp, settings, btn_a, btn_b):
     """Adjust the MHz of the current turbo state. A+B saves and exits."""
     editing_turbo = settings.turbo or settings.mhz_normal is None
     val = settings.mhz_turbo if editing_turbo else settings.mhz_normal
+    other = settings.mhz_normal if editing_turbo else settings.mhz_turbo
 
     set_reset_mirror(False)  # no reset pulses while editing
     disp.show('SEt')
@@ -413,7 +410,7 @@ def setup_mode(disp, settings, btn_a, btn_b):
         time.sleep_ms(10)
     time.sleep_ms(300)
     disp.blink(1)  # 2 Hz hardware blink marks setup mode
-    show_mhz(disp, val)
+    show_mhz(disp, val, settings, other)
 
     # B (SW2) is the right-hand button, so it counts up; A counts down.
     step_a = Stepper(btn_a, -1)
@@ -430,7 +427,7 @@ def setup_mode(disp, settings, btn_a, btn_b):
             new = _idx_to_mhz(idx)
             if new != val:
                 val = new
-                show_mhz(disp, val)
+                show_mhz(disp, val, settings, other)
         time.sleep_ms(10)
 
     if editing_turbo:
@@ -469,9 +466,9 @@ def run():
         if locked:
             disp.show(config.LOCK_TEXT)  # the lock has no LED of its own
         elif settings.turbo or settings.mhz_normal is None:
-            show_mhz(disp, settings.mhz_turbo)
+            show_mhz(disp, settings.mhz_turbo, settings, settings.mhz_normal)
         else:
-            show_mhz(disp, settings.mhz_normal)
+            show_mhz(disp, settings.mhz_normal, settings, settings.mhz_turbo)
 
     def save_settings():
         # A deferred save (PC owns the drive) is worth telling the user

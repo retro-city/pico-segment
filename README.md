@@ -14,8 +14,13 @@ through an HT16K33A over I2C.
   blinks). B (the right-hand button) = +1, A = −1, hold to auto-repeat;
   keep holding 2 s and steps become ±10. A+B saves and exits. The reset
   output is suspended during setup. Above 999 MHz the display switches to GHz
-  with a decimal point (`1.00` … `9.99`, 10 MHz per step); stepping
-  down from `1.00` returns to `999`.
+  with a decimal point (`1.00` … `9.99`, 10 MHz per step, then `10.0`
+  … `99.9`, 100 MHz per step); stepping down from `1.00` returns to
+  `999`. A speed in `settings.json` that falls between steps is rounded
+  to the nearest one (25049 shows `25.0`, 25050 shows `25.1`). With
+  `mhz_pad` on, both speeds use the notation of the higher one and
+  are padded with leading zeros, so 25000 and 8000 read `25.0` and
+  `08.0` rather than `25.0` and `8.00`.
 - At power-on all three LEDs light for 2 seconds (lamp test), then only the
   **power** LED stays lit. Turbo starts on (`TURBO_ON_AT_BOOT`).
 - **Boot sound**: if a `boot.wav` is on the Pico's filesystem it plays
@@ -229,6 +234,7 @@ panel puts them there itself:
   | `turbo` | turbo on/off |
   | `turbo_active_high` | `false` if the motherboard wants GP20 low for turbo on |
   | `mhz_turbo`, `mhz_normal` | the two speeds (`mhz_normal: null` = always show turbo) |
+  | `mhz_pad` | show both speeds in the higher one's notation, zero-padded: 25000/8000 as `25.0`/`08.0` |
   | `brightness` | display 0–15 |
   | `spin_animation` | segment spin on speed change |
   | `clicker` | HDD clicker on/off (what the B hold toggles) |

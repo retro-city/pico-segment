@@ -12,6 +12,10 @@ from ht16k33_seg import RED, YELLOW, GREEN
 # Speeds shown on the 3-digit display.
 MHZ_TURBO = 166     # shown while turbo is on
 MHZ_NORMAL = 133    # shown while turbo is off (None = always show MHZ_TURBO)
+# Show both speeds in the same notation, zero-padded, so the display
+# does not jump between formats: 25000/8000 as 25.0/08.0 instead of
+# 25.0/8.00, 133/25 as 133/025. The higher speed picks the notation.
+MHZ_PAD = False
 
 # Turbo state at power-on.
 TURBO_ON_AT_BOOT = True
